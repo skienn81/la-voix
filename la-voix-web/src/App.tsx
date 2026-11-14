@@ -17,7 +17,7 @@ import {
 
 import { Language, TouchCard, GestureStep } from './types';
 import { scenarios, scenarioReverseCards } from './data/scenarios';
-import { CameraTracker } from './components/CameraTracker';
+import { CameraTracker, SessionState } from './components/CameraTracker';
 import { ConfirmationGate } from './components/ConfirmationGate';
 import { ReverseFeedbackPanel } from './components/ReverseFeedbackPanel';
 import { VideoGuideModal } from './components/VideoGuideModal';
@@ -49,6 +49,7 @@ export const App: React.FC = () => {
   const [matchedStepIds, setMatchedStepIds] = useState<Set<string>>(new Set());
   const [isVideoGuideOpen, setIsVideoGuideOpen] = useState<boolean>(false);
   const [resetFeedback, setResetFeedback] = useState<string | null>(null);
+  const [sessionState, setSessionState] = useState<SessionState>('recording');
   const resetTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -65,15 +66,11 @@ export const App: React.FC = () => {
   // Reset or initialize session state on scenario change
   useEffect(() => {
     setCurrentStepIndex(0);
-    if (activeScenario.steps.length > 0) {
-      setCompletedStepIds(new Set([activeScenario.steps[0].id]));
-      setMatchedStepIds(new Set([activeScenario.steps[0].id]));
-    } else {
-      setCompletedStepIds(new Set());
-      setMatchedStepIds(new Set());
-    }
+    setCompletedStepIds(new Set());
+    setMatchedStepIds(new Set());
     setSelectedTouchCards([]);
-  }, [scenarioId, activeScenario]);
+    setSessionState('recording');
+  }, [scenarioId]);
 
   const currentStep = activeScenario.steps[currentStepIndex] || activeScenario.steps[0];
 
@@ -81,45 +78,16 @@ export const App: React.FC = () => {
     return activeScenario.steps.slice(0, currentStepIndex + 1);
   }, [activeScenario, currentStepIndex]);
 
-  // Progressive Assembled Sentence based on matched tokens
-  const assembledSentenceText = useMemo(() => {
-    const totalSteps = activeScenario.steps.length;
-    const count = activeScenario.steps.filter((s) => matchedStepIds.has(s.id)).length;
-
-    if (count >= totalSteps) {
-      return language === 'vi' ? activeScenario.baseSentenceVi : activeScenario.baseSentenceEn;
-    }
-
-    if (scenarioId === 'medical') {
-      if (language === 'vi') {
-        if (count === 1) return 'Tôi...';
-        if (count === 2) return 'Tôi bị đau...';
-        if (count === 3) return 'Tôi bị đau quặn bụng...';
-        return 'Tôi bị đau quặn bụng dữ dội từ hôm qua...';
-      } else {
-        if (count === 1) return 'I...';
-        if (count === 2) return 'I have pain...';
-        if (count === 3) return 'I have abdominal pain...';
-        return 'I have had cramping abdominal pain since yesterday...';
-      }
-    } else {
-      if (language === 'vi') {
-        if (count === 1) return 'Tôi là sinh viên...';
-        if (count === 2) return 'Tôi là sinh viên cần...';
-        if (count === 3) return 'Tôi là sinh viên cần giúp đỡ...';
-        return 'Tôi là sinh viên, cần giúp đỡ làm thủ tục khai báo và xin giấy xác nhận...';
-      } else {
-        if (count === 1) return 'I am a student...';
-        if (count === 2) return 'I am a student needing...';
-        if (count === 3) return 'I am a student needing assistance...';
-        return 'I am a student needing assistance with declaration procedures...';
-      }
-    }
-  }, [scenarioId, language, activeScenario, matchedStepIds]);
-
   const allTokensAssembled = useMemo(() => {
-    return activeScenario.steps.every((s) => matchedStepIds.has(s.id));
+    return matchedStepIds.size >= activeScenario.steps.length;
   }, [activeScenario.steps, matchedStepIds]);
+
+  // Transition to ready_to_finalize when all 4 words are assembled
+  useEffect(() => {
+    if (allTokensAssembled && sessionState === 'recording') {
+      setSessionState('ready_to_finalize');
+    }
+  }, [allTokensAssembled, sessionState]);
 
   const handleToggleTouchCard = (card: TouchCard) => {
     setSelectedTouchCards((prev) => {
@@ -142,13 +110,11 @@ export const App: React.FC = () => {
     });
   }, [activeScenario.steps]);
 
-  // Handle Token Matched from CameraTracker
   const handleTokenMatched = useCallback((step: GestureStep) => {
     setMatchedStepIds((prevSet) => new Set([...prevSet, step.id]));
     setCompletedStepIds((prevSet) => new Set([...prevSet, step.id]));
   }, []);
 
-  // Smart Typing Tutor Auto-Advance: advances through words 1->2->3->4 and locks on final step
   const handleAutoAdvance = useCallback(() => {
     setCurrentStepIndex((prev) => {
       if (prev < activeScenario.steps.length - 1) {
@@ -162,21 +128,30 @@ export const App: React.FC = () => {
     });
   }, [activeScenario.steps]);
 
-  // Law 91/2025/QH15 Compliant Zero-Retention Reset
+  // Handle Session Start Wake
+  const handleSessionStart = useCallback(() => {
+    setSessionState('recording');
+    setCurrentStepIndex(0);
+  }, []);
+
+  // Handle Final Thumbs Up -> Speak Aloud!
+  const handleFinalizeLike = useCallback(() => {
+    // Automatically trigger speech broadcast via phím C
+    const event = new KeyboardEvent('keydown', { key: 'c', bubbles: true });
+    window.dispatchEvent(event);
+  }, []);
+
+  // Zero-Retention Reset
   const handleZeroRetentionReset = useCallback(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
 
     setCurrentStepIndex(0);
-    if (activeScenario.steps.length > 0) {
-      setCompletedStepIds(new Set([activeScenario.steps[0].id]));
-      setMatchedStepIds(new Set([activeScenario.steps[0].id]));
-    } else {
-      setCompletedStepIds(new Set());
-      setMatchedStepIds(new Set());
-    }
+    setCompletedStepIds(new Set());
+    setMatchedStepIds(new Set());
     setSelectedTouchCards([]);
+    setSessionState('recording');
 
     try {
       sessionStorage.clear();
@@ -196,7 +171,7 @@ export const App: React.FC = () => {
       setResetFeedback(null);
       resetTimeoutRef.current = null;
     }, 3000);
-  }, [activeScenario.steps, language]);
+  }, [language]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -207,7 +182,11 @@ export const App: React.FC = () => {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        handleNextStep();
+        if (sessionState === 'ready_to_finalize') {
+          handleFinalizeLike();
+        } else {
+          handleNextStep();
+        }
       } else if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
         handleZeroRetentionReset();
@@ -223,11 +202,11 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNextStep, handleZeroRetentionReset]);
+  }, [handleNextStep, handleZeroRetentionReset, handleFinalizeLike, sessionState]);
 
   return (
     <div className="la-voix-chassis">
-      {/* 1. HARDWARE INSTRUMENT STRIP (TOP BAR) */}
+      {/* 1. TOP INSTRUMENT STRIP */}
       <header className="instrument-strip" role="banner">
         <div className="brand-section">
           <div className="brand-badge" aria-hidden="true">LV</div>
@@ -244,7 +223,7 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Tactile Mode Rocker Switch */}
+        {/* Mode Rocker Switch */}
         <nav className="mode-rocker-track" aria-label="Mode Selection">
           <button
             type="button"
@@ -331,75 +310,33 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* 2. TWO-PANEL WORKSPACE GRID */}
+      {/* 2. MINIMALIST TWO-PANEL WORKSPACE GRID */}
       <main className="workspace-deck" role="main">
-        {/* LEFT CONSOLE: SENSOR VIEWPORT & STEP SEQUENCER */}
+        {/* LEFT CONSOLE: WEBCAM TRACKER & CLEAN SENTENCE STRIP */}
         <div className="left-console">
           {/* SENSOR CAMERA / VIEWFINDER */}
           <CameraTracker
             currentStep={currentStep}
             currentStepIndex={currentStepIndex}
+            sessionState={sessionState}
+            onSessionStart={handleSessionStart}
+            onFinalizeLike={handleFinalizeLike}
             language={language}
             onAutoAdvance={handleAutoAdvance}
             onTokenMatched={handleTokenMatched}
           />
 
-          {/* PHYSICAL STEP SEQUENCER KEYCAPS */}
-          <div className="sequencer-chassis">
-            <div className="sequencer-header">
-              <span className="sequencer-title">
-                {language === 'vi' ? 'Chuỗi Ký hiệu Thời gian thực' : 'Real-time Gesture Sequencer'}
-              </span>
-              <span className="sequencer-hint">
-                {language === 'vi' ? 'Nhấn Space để chuyển cử chỉ' : 'Press Space to advance'}
-              </span>
-            </div>
-
-            <div className="keycap-row" role="tablist">
-              {activeScenario.steps.map((step, idx) => {
-                const isActive = idx === currentStepIndex;
-                const isCompleted = idx <= currentStepIndex;
-
-                return (
-                  <button
-                    key={step.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    className={`keycap-btn ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
-                    onClick={() => {
-                      setCurrentStepIndex(idx);
-                      setCompletedStepIds((prev) => new Set([...prev, step.id]));
-                      setMatchedStepIds((prev) => new Set([...prev, step.id]));
-                    }}
-                  >
-                    <div className="keycap-top-row">
-                      <span className="keycap-num">0{idx + 1}</span>
-                      <span className="keycap-led" aria-hidden="true" />
-                    </div>
-                    <div className="keycap-gloss">
-                      {language === 'vi' ? step.gloss : step.glossEn}
-                    </div>
-                    <div className="keycap-sub">
-                      {Math.round(step.confidence * 100)}% match
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* SENTENCE ASSEMBLY STRIP (DẢI GHÉP CÂU TỰ ĐỘNG) */}
-          <div className="sentence-assembly-chassis">
+          {/* DẢI GHÉP CÂU TỰ ĐỘNG (CLEAN SENTENCE ASSEMBLY STRIP) */}
+          <div className="sentence-assembly-chassis" style={{ marginTop: '10px' }}>
             <div className="assembly-strip-header">
               <div className="assembly-strip-title">
                 <Sparkles size={14} className={allTokensAssembled ? 'text-emerald-500' : 'text-cyan-500'} />
-                <span>{language === 'vi' ? 'Dải Ghép Câu Tự Động' : 'Sentence Assembly Strip'}</span>
+                <span>{language === 'vi' ? 'Dải Ghép Ký Hiệu Thời Gian Thực' : 'Real-time Token Snap Strip'}</span>
               </div>
               <span className="assembly-strip-counter">
                 {allTokensAssembled
-                  ? (language === 'vi' ? '✓ CÂU HOÀN CHỈNH (4/4)' : '✓ COMPLETE (4/4)')
-                  : (language === 'vi' ? `ĐANG GHÉP: ${matchedStepIds.size}/4 TỪ` : `ASSEMBLING: ${matchedStepIds.size}/4`)}
+                  ? (language === 'vi' ? '✓ ĐỦ 4/4 TỪ · THẢ LIKE 👍 ĐỂ CHỐT' : '✓ 4/4 TOKENS · THUMBS UP TO FINALIZE')
+                  : (language === 'vi' ? `ĐÃ BẮT: ${matchedStepIds.size}/4 TỪ` : `TRACKED: ${matchedStepIds.size}/4`)}
               </span>
             </div>
 
@@ -407,14 +344,22 @@ export const App: React.FC = () => {
             <div className={`assembly-track ${matchedStepIds.size > 0 ? 'has-tokens' : ''}`}>
               {activeScenario.steps.map((step, idx) => {
                 const isMatched = matchedStepIds.has(step.id);
+                const isCurrent = idx === currentStepIndex;
                 return (
                   <React.Fragment key={step.id}>
                     {idx > 0 && <span className="assembly-token-connector">→</span>}
                     <div
                       className={`assembly-token ${isMatched ? 'active-token tokenAssemble' : ''}`}
                       style={{
-                        opacity: isMatched ? 1 : 0.45,
-                        borderStyle: isMatched ? 'solid' : 'dashed',
+                        opacity: isMatched ? 1 : isCurrent ? 0.9 : 0.45,
+                        borderColor: isCurrent ? 'var(--signal-orange)' : isMatched ? '#10b981' : '#cbd5e1',
+                        borderWidth: isCurrent ? '2px' : '1px',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        setCurrentStepIndex(idx);
+                        setCompletedStepIds((prev) => new Set([...prev, step.id]));
+                        setMatchedStepIds((prev) => new Set([...prev, step.id]));
                       }}
                     >
                       <span className="token-index">0{idx + 1}</span>
@@ -425,35 +370,10 @@ export const App: React.FC = () => {
                 );
               })}
             </div>
-
-            {/* Assembled Sentence Preview Card */}
-            <div className="assembled-sentence-card">
-              <div className="assembled-sentence-vi">
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: allTokensAssembled ? '#059669' : '#0284c7', marginRight: '6px' }}>
-                  {allTokensAssembled ? '[CÂU HOÀN CHỈNH]:' : '[ĐANG GHÉP]:'}
-                </span>
-                <span>{assembledSentenceText}</span>
-                {selectedTouchCards.length > 0 && (
-                  <span style={{ color: '#e11d48', fontWeight: 600, marginLeft: '6px' }}>
-                    (+{selectedTouchCards.map((c) => (language === 'vi' ? c.label : c.labelEn)).join(', ')})
-                  </span>
-                )}
-              </div>
-              <div className="assembled-sentence-en">
-                {allTokensAssembled ? activeScenario.baseSentenceEn : 'Sentence assembling in real-time as signs match...'}
-              </div>
-            </div>
-
-            {allTokensAssembled && (
-              <div style={{ marginTop: '2px', fontSize: '11px', fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span>👉</span>
-                <span>{language === 'vi' ? 'Sẵn sàng phát tiếng! Nhấn phím C hoặc chạm Phát tiếng ra loa Bác sĩ' : 'Ready to broadcast! Press C or click Speak Aloud'}</span>
-              </div>
-            )}
           </div>
 
           {/* TACTILE MODIFIER KEYPAD (TOUCH CARDS) */}
-          <div className="modifier-chassis">
+          <div className="modifier-chassis" style={{ marginTop: '10px' }}>
             <div className="modifier-title">
               {language === 'vi' ? 'Bổ trợ Triệu chứng Lâm sàng (Chạm nhanh)' : 'Clinical Modifier Matrix'}
             </div>
@@ -477,12 +397,14 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT CONSOLE: TELEPROMPTER, BROADCAST & REVERSE STATION */}
+        {/* RIGHT CONSOLE: AI AUTO-COMPLETE PREDICTOR & REVERSE STATION */}
         <div className="right-console">
-          {/* ONE-TOUCH SAFETY CONFIRMATION TELEPROMPTER */}
+          {/* AI AUTO-COMPLETE SAFETY CONFIRMATION GATE */}
           <ConfirmationGate
             scenario={activeScenario}
             activeSteps={activeCompletedSteps}
+            matchedStepCount={matchedStepIds.size}
+            allMatched={allTokensAssembled}
             selectedTouchCards={selectedTouchCards}
             language={language}
           />
@@ -496,22 +418,22 @@ export const App: React.FC = () => {
         </div>
       </main>
 
-      {/* 3. HARDWARE STATUS STRIP (FOOTER) */}
+      {/* 3. HARDWARE STATUS FOOTER */}
       <footer className="hardware-footer-strip" role="contentinfo">
         <div className="footer-left">
           <div className="footer-pill">
             <span className="footer-dot" aria-hidden="true" />
-            <span>EDGE INFERENCE: ONNX / MEDIAPIPE</span>
+            <span>AI ENGINE: MEDIAPIPE SINGLE-HAND V3</span>
           </div>
           <div className="footer-pill">
-            <span>LATENCY: 24ms</span>
+            <span>LATENCY: 18ms</span>
           </div>
           <div className="footer-pill">
             <span>PRIVACY: LAW 91/2025 ZERO-RETENTION</span>
           </div>
         </div>
         <div className="footer-right">
-          <span>SHORTCUTS: [SPACE] STEP · [C] BROADCAST · [R] RESET · [G] GUIDE</span>
+          <span>SHORTCUTS: [SPACE] BƯỚC · [C] DUYỆT PHÁT ÂM · [R] XÓA PHIÊN · [G] KỊCH BẢN</span>
         </div>
       </footer>
 

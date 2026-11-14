@@ -1,13 +1,18 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Video, VideoOff, RefreshCw, CheckCircle2, Sliders, Sparkles, ToggleLeft, ToggleRight, ThumbsUp } from 'lucide-react';
+import { Video, VideoOff, RefreshCw, CheckCircle2, Sliders, Sparkles, ToggleLeft, ToggleRight, ThumbsUp, Play, Settings } from 'lucide-react';
 import { GestureStep, Language } from '../types';
 import { HandLandmarkStabilizer } from '../utils/oneEuroFilter';
 import { classifyHandLandmarks, GestureMatchResult, getTargetPoseName } from '../utils/gestureClassifier';
 import { HandPoseGuide } from './HandPoseGuide';
 
+export type SessionState = 'idle' | 'recording' | 'ready_to_finalize';
+
 interface CameraTrackerProps {
   currentStep: GestureStep;
   currentStepIndex?: number;
+  sessionState?: SessionState;
+  onSessionStart?: () => void;
+  onFinalizeLike?: () => void;
   language: Language;
   onMotionStateChange?: (isActive: boolean, energy: number) => void;
   onAutoAdvance?: () => void;
@@ -29,12 +34,11 @@ const HAND_CONNECTIONS: [number, number][] = [
   [0, 17],
 ];
 
-// Natural Intentional Hold duration: 800ms (prevents accidental twitch / spamming!)
-const LOCK_HOLD_MS = 800;
+const LOCK_HOLD_MS = 750; // 0.75s intentional hold
 
 // AudioContext for affirmative token match chime
 let sharedAudioCtx: AudioContext | null = null;
-const playAdvanceChirp = (isFinal: boolean = false) => {
+const playAdvanceChirp = (type: 'word' | 'start' | 'final' = 'word') => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
@@ -47,19 +51,28 @@ const playAdvanceChirp = (isFinal: boolean = false) => {
 
     const osc = sharedAudioCtx.createOscillator();
     const gain = sharedAudioCtx.createGain();
-
-    osc.type = 'sine';
     const now = sharedAudioCtx.currentTime;
-    if (isFinal) {
-      // High triumph arpeggio for final thumbs up
-      osc.frequency.setValueAtTime(587.33, now); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08); // A5
-      osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.16); // D6
-      gain.gain.setValueAtTime(0.22, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+    if (type === 'final') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.08);
+      osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.16);
+      osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.24);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
       osc.start(now);
-      osc.stop(now + 0.22);
+      osc.stop(now + 0.32);
+    } else if (type === 'start') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.12);
     } else {
+      osc.type = 'sine';
       osc.frequency.setValueAtTime(880, now);
       osc.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
       gain.gain.setValueAtTime(0.18, now);
@@ -76,6 +89,10 @@ const playAdvanceChirp = (isFinal: boolean = false) => {
 
 export const CameraTracker: React.FC<CameraTrackerProps> = ({
   currentStep,
+  currentStepIndex = 0,
+  sessionState = 'recording',
+  onSessionStart,
+  onFinalizeLike,
   language,
   onMotionStateChange,
   onAutoAdvance,
@@ -93,7 +110,8 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   const lastMediaPipeTimestampRef = useRef<number>(0);
 
   const [isSimulated, setIsSimulated] = useState<boolean>(false);
-  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(false); // Default OFF per Swarm Lead Directive #28 for 90s video recording!
+  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false); // Popover settings state
   const [cameraLoading, setCameraLoading] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [hasHandInView, setHasHandInView] = useState<boolean>(false);
@@ -115,6 +133,10 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   onTokenMatchedRef.current = onTokenMatched;
   const autoAdvanceEnabledRef = useRef(autoAdvanceEnabled);
   autoAdvanceEnabledRef.current = autoAdvanceEnabled;
+  const onSessionStartRef = useRef(onSessionStart);
+  onSessionStartRef.current = onSessionStart;
+  const onFinalizeLikeRef = useRef(onFinalizeLike);
+  onFinalizeLikeRef.current = onFinalizeLike;
 
   // Stop camera stream safely
   const stopCameraStream = useCallback(() => {
@@ -164,7 +186,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
-          numHands: 1, // Focus strictly on ONE Hand for maximum stability
+          numHands: 1,
         });
         if (isMountedRef.current) {
           landmarkerRef.current = landmarker;
@@ -194,7 +216,6 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     }
   }, [language]);
 
-  // Auto-start camera on mount
   useEffect(() => {
     startCamera();
     return () => {
@@ -202,7 +223,6 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     };
   }, [startCamera, stopCameraStream]);
 
-  // Toggle between Camera and Simulated AI Mode
   const toggleMode = () => {
     if (isSimulated) {
       startCamera();
@@ -221,7 +241,6 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     }
   };
 
-  // Generate procedural landmarks ONLY when user explicitly clicks "Chế độ Mô phỏng"
   const getProceduralLandmarks = (t: number, width: number, height: number, gloss: string) => {
     const cx = width * 0.5;
     const cy = height * 0.56;
@@ -295,7 +314,6 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     return landmarks;
   };
 
-  // Draw clean hand skeleton ONLY when real hand is in view
   const drawCanvas = (
     ctx: CanvasRenderingContext2D,
     userLandmarks: { x: number; y: number }[],
@@ -305,7 +323,6 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   ) => {
     ctx.clearRect(0, 0, width, height);
 
-    // CRITICAL: When no real hand, leave canvas 100% clean!
     if (!userLandmarks || userLandmarks.length < 21) {
       return;
     }
@@ -360,7 +377,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     });
   };
 
-  // Main Tracking and Pose Matching Loop
+  // Main Tracking Loop with EXACT Cover-Fit Affine Mapping (Zero Drift!)
   useEffect(() => {
     isMountedRef.current = true;
     let isRunning = true;
@@ -368,6 +385,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     const renderLoop = (now: number) => {
       if (!isRunning) return;
 
+      const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!canvas) {
         animationFrameRef.current = requestAnimationFrame(renderLoop);
@@ -385,61 +403,76 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         canvas.height = canvas.clientHeight || 360;
       }
 
-      const width = canvas.width;
-      const height = canvas.height;
+      const cw = canvas.width;
+      const ch = canvas.height;
       const timeInSec = now * 0.001;
 
-      // Extract Raw Landmarks
+      // Cover-Fit Affine Mapping: computes exact rendered video boundaries inside viewport
+      let renderW = cw;
+      let renderH = ch;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (video && video.videoWidth && video.videoHeight) {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        const videoRatio = vw / vh;
+        const canvasRatio = cw / ch;
+
+        if (canvasRatio > videoRatio) {
+          renderW = cw;
+          renderH = cw / videoRatio;
+          offsetY = (ch - renderH) / 2;
+        } else {
+          renderH = ch;
+          renderW = ch * videoRatio;
+          offsetX = (cw - renderW) / 2;
+        }
+      }
+
       let rawLandmarks: { x: number; y: number }[] = [];
       let handDetected = false;
 
       if (!isSimulated) {
-        // Real Webcam Inference
-        if (videoRef.current && landmarkerRef.current && videoRef.current.readyState >= 2) {
+        if (video && landmarkerRef.current && video.readyState >= 2) {
           try {
             const safeTimestamp = Math.max(now, lastMediaPipeTimestampRef.current + 1);
             lastMediaPipeTimestampRef.current = safeTimestamp;
 
-            const results = landmarkerRef.current.detectForVideo(videoRef.current, safeTimestamp);
+            const results = landmarkerRef.current.detectForVideo(video, safeTimestamp);
             if (results.landmarks && results.landmarks.length > 0) {
               const raw = results.landmarks[0];
-              // Active Zone Filter: ignore hand if wrist is below 88% screen height (resting on keyboard/mouse)
               const wristY = raw[0].y;
-              if (wristY < 0.88) {
+              if (wristY < 0.90) {
                 rawLandmarks = raw.map((lm: any) => ({
-                  x: lm.x * width,
-                  y: lm.y * height,
+                  x: offsetX + lm.x * renderW,
+                  y: offsetY + lm.y * renderH,
                 }));
                 handDetected = true;
               }
             }
           } catch (e) {
-            // MediaPipe detection loop safe catch
+            // safe catch
           }
         }
       } else {
-        // ONLY in explicit simulation mode:
-        rawLandmarks = getProceduralLandmarks(timeInSec, width, height, currentStep.gloss);
+        rawLandmarks = getProceduralLandmarks(timeInSec, cw, ch, currentStep.gloss);
         handDetected = true;
       }
 
-      // Safe filtering and single-hand gesture classification
       let currentLandmarks: { x: number; y: number }[] = [];
       let isTargetMatched = false;
       let matchScoreVal = 0;
       let classification: GestureMatchResult | null = null;
 
       if (handDetected && rawLandmarks.length >= 21) {
-        // Stabilize with 1€ Filter
         currentLandmarks = stabilizerRef.current.filter(rawLandmarks, now);
-
-        // Classify anatomical gesture
-        classification = classifyHandLandmarks(currentLandmarks, currentStep.gloss);
+        classification = classifyHandLandmarks(currentLandmarks, currentStep.gloss, sessionState);
         matchScoreVal = classification.matchScore;
         isTargetMatched = classification.isMatched;
       }
 
-      // Auto-Advance Lock Engine (Controlled, Requires 800ms intentional hold!)
+      // Auto-Advance Lock Engine
       if (handDetected && isTargetMatched && now > lockCooldownUntilRef.current) {
         if (!matchStartTimeRef.current) {
           matchStartTimeRef.current = now;
@@ -452,30 +485,32 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
           lastProgressUpdateRef.current = now;
         }
 
-        // Trigger advance when hold reaches LOCK_HOLD_MS
         if (duration >= LOCK_HOLD_MS) {
-          const isFinalStep = currentStep.gloss === 'Hôm qua' || currentStep.gloss === 'Khai báo';
-          playAdvanceChirp(isFinalStep);
+          if (sessionState === 'idle') {
+            playAdvanceChirp('start');
+            setIsFlashing(true);
+            setTimeout(() => setIsFlashing(false), 400);
+            if (onSessionStartRef.current) onSessionStartRef.current();
+          } else if (sessionState === 'ready_to_finalize') {
+            playAdvanceChirp('final');
+            setIsFlashing(true);
+            setTimeout(() => setIsFlashing(false), 600);
+            if (onFinalizeLikeRef.current) onFinalizeLikeRef.current();
+          } else {
+            playAdvanceChirp('word');
+            setIsFlashing(true);
+            setLastMatchedGloss(currentStep.gloss);
+            setTimeout(() => setIsFlashing(false), 450);
 
-          setIsFlashing(true);
-          setLastMatchedGloss(currentStep.gloss);
-          setTimeout(() => {
-            if (isMountedRef.current) {
-              setIsFlashing(false);
+            if (onTokenMatchedRef.current) onTokenMatchedRef.current(currentStep);
+            if (autoAdvanceEnabledRef.current && onAutoAdvanceRef.current) {
+              onAutoAdvanceRef.current();
             }
-          }, 450);
-
-          if (onTokenMatchedRef.current) {
-            onTokenMatchedRef.current(currentStep);
-          }
-
-          if (autoAdvanceEnabledRef.current && onAutoAdvanceRef.current) {
-            onAutoAdvanceRef.current();
           }
 
           matchStartTimeRef.current = null;
           setLockProgress(0);
-          lockCooldownUntilRef.current = now + 900; // Cooldown to prevent accidental double-skip
+          lockCooldownUntilRef.current = now + 900;
         }
       } else {
         if (matchStartTimeRef.current !== null) {
@@ -484,7 +519,6 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         }
       }
 
-      // Throttled UI state updates
       if (now - lastReactUpdateRef.current >= 100) {
         setHasHandInView(handDetected);
         setMatchScore(matchScoreVal);
@@ -492,8 +526,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         lastReactUpdateRef.current = now;
       }
 
-      // Draw clean canvas
-      drawCanvas(ctx, currentLandmarks, width, height, isTargetMatched);
+      drawCanvas(ctx, currentLandmarks, cw, ch, isTargetMatched);
 
       animationFrameRef.current = requestAnimationFrame(renderLoop);
     };
@@ -507,7 +540,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         animationFrameRef.current = null;
       }
     };
-  }, [isSimulated, currentStep.gloss, onMotionStateChange]);
+  }, [isSimulated, currentStep.gloss, sessionState, onMotionStateChange]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -525,31 +558,27 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     };
   }, [stopCameraStream]);
 
-  // Manual Force Match / Advance with Space
   const handleForceAdvance = () => {
-    const isFinalStep = currentStep.gloss === 'Hôm qua' || currentStep.gloss === 'Khai báo';
-    playAdvanceChirp(isFinalStep);
-    setIsFlashing(true);
-    setLastMatchedGloss(currentStep.gloss);
-    setTimeout(() => {
-      if (isMountedRef.current) {
-        setIsFlashing(false);
-      }
-    }, 450);
-    if (onTokenMatchedRef.current) {
-      onTokenMatchedRef.current(currentStep);
-    }
-    if (onAutoAdvanceRef.current) {
-      onAutoAdvanceRef.current();
+    if (sessionState === 'idle') {
+      playAdvanceChirp('start');
+      if (onSessionStartRef.current) onSessionStartRef.current();
+    } else if (sessionState === 'ready_to_finalize') {
+      playAdvanceChirp('final');
+      if (onFinalizeLikeRef.current) onFinalizeLikeRef.current();
+    } else {
+      playAdvanceChirp('word');
+      setIsFlashing(true);
+      setLastMatchedGloss(currentStep.gloss);
+      setTimeout(() => setIsFlashing(false), 450);
+      if (onTokenMatchedRef.current) onTokenMatchedRef.current(currentStep);
+      if (onAutoAdvanceRef.current) onAutoAdvanceRef.current();
     }
   };
 
-  const isFinalTarget = currentStep.gloss === 'Hôm qua' || currentStep.gloss === 'Khai báo';
-
   return (
     <div className="sensor-chassis">
-      {/* Sensor Control Header */}
-      <div className="sensor-header">
+      {/* Sensor Minimal Header: ONLY Status Indicator & One Settings Cog */}
+      <div className="sensor-header" style={{ position: 'relative' }}>
         <div className="sensor-title-box">
           <span
             className="sensor-indicator-light"
@@ -561,48 +590,82 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
           </span>
         </div>
 
-        <div className="sensor-switch-group">
-          {/* Toggle Auto-Advance for video recording */}
+        {/* Unified Settings Gear Button */}
+        <div style={{ position: 'relative' }}>
           <button
             type="button"
-            className={`auto-advance-toggle ${autoAdvanceEnabled ? 'on' : ''}`}
-            onClick={() => setAutoAdvanceEnabled((prev) => !prev)}
-            title="Bật/Tắt tự động nhảy từ khi làm đúng (0.8s)"
-            aria-pressed={autoAdvanceEnabled}
+            className={`btn-hardware ${isSettingsOpen ? 'active' : ''}`}
+            style={{ minHeight: '30px', padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}
+            onClick={() => setIsSettingsOpen((prev) => !prev)}
+            title="Cài đặt camera & nhận diện"
+            aria-label="Settings"
           >
-            <span className="toggle-led" aria-hidden="true" />
-            <span>{autoAdvanceEnabled ? 'Tự nhảy: BẬT' : 'Tự nhảy: TẮT'}</span>
+            <Settings size={13} className={isSettingsOpen ? 'rotate-90 transition-transform' : ''} />
+            <span>Cài đặt</span>
           </button>
 
-          <button
-            type="button"
-            className="btn-hardware"
-            style={{ minHeight: '32px', fontSize: '10px' }}
-            onClick={() => setShowDiagnostics((prev) => !prev)}
-            title="Bật/Tắt chẩn đoán ngón tay"
-          >
-            <Sliders size={12} aria-hidden="true" />
-            <span>{showDiagnostics ? 'Đóng Kỹ thuật' : 'Kỹ thuật'}</span>
-          </button>
+          {/* Clean Settings Popover Dropdown */}
+          {isSettingsOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '36px',
+                right: 0,
+                width: '210px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                padding: '8px',
+                zIndex: 40,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}
+            >
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', padding: '2px 4px' }}>
+                Tùy chọn ghi hình
+              </div>
 
-          <button
-            type="button"
-            className="btn-hardware"
-            style={{ minHeight: '32px', fontSize: '10px' }}
-            onClick={toggleMode}
-            disabled={cameraLoading}
-          >
-            {cameraLoading ? (
-              <RefreshCw className="animate-spin" size={12} aria-hidden="true" />
-            ) : isSimulated ? (
-              <Video size={12} aria-hidden="true" />
-            ) : (
-              <VideoOff size={12} aria-hidden="true" />
-            )}
-            <span>
-              {isSimulated ? 'Bật Camera Thật' : 'Chế độ Mô phỏng'}
-            </span>
-          </button>
+              {/* Auto-Advance toggle */}
+              <button
+                type="button"
+                className="btn-hardware"
+                style={{ width: '100%', justifyContent: 'space-between', minHeight: '30px', fontSize: '11px', background: autoAdvanceEnabled ? '#f0fdf4' : '#f8fafc' }}
+                onClick={() => setAutoAdvanceEnabled((prev) => !prev)}
+              >
+                <span>Tự nhảy từ (0.75s)</span>
+                {autoAdvanceEnabled ? (
+                  <ToggleRight size={16} className="text-emerald-500" />
+                ) : (
+                  <ToggleLeft size={16} className="text-slate-400" />
+                )}
+              </button>
+
+              {/* Technical Diagnostics */}
+              <button
+                type="button"
+                className="btn-hardware"
+                style={{ width: '100%', justifyContent: 'space-between', minHeight: '30px', fontSize: '11px' }}
+                onClick={() => setShowDiagnostics((prev) => !prev)}
+              >
+                <span>Chẩn đoán ngón tay</span>
+                <Sliders size={13} />
+              </button>
+
+              {/* Simulation Mode Toggle */}
+              <button
+                type="button"
+                className="btn-hardware"
+                style={{ width: '100%', justifyContent: 'space-between', minHeight: '30px', fontSize: '11px' }}
+                onClick={toggleMode}
+                disabled={cameraLoading}
+              >
+                <span>{isSimulated ? 'Bật Camera Thật' : 'Chế độ Mô phỏng'}</span>
+                {isSimulated ? <Video size={13} /> : <VideoOff size={13} />}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -613,7 +676,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
       )}
 
       {/* Optical Viewfinder Frame */}
-      <div className={`viewfinder-frame ${isFlashing ? 'match-flash is-flashing' : ''} ${liveClassification?.isMatched ? 'match-sustained' : ''}`}>
+      <div className={`viewfinder-frame ${isFlashing ? 'match-flash is-flashing' : ''}`}>
         <video
           ref={videoRef}
           className="viewfinder-video"
@@ -623,46 +686,31 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         />
         <canvas ref={canvasRef} className="viewfinder-canvas" />
 
-        {/* Viewfinder Flash Overlay Glow */}
         {isFlashing && <div className="viewfinder-flash-overlay" aria-hidden="true" />}
 
         {/* Viewfinder Reticle & HUD */}
         <div className="viewfinder-reticle">
           <div className="reticle-top">
-            <div className="reticle-badge" style={{ background: 'rgba(0,0,0,0.65)', border: 'none' }}>
+            <div className="reticle-badge" style={{ background: 'rgba(0,0,0,0.68)', border: 'none' }}>
               <span style={{ color: hasHandInView ? '#10b981' : '#9ca3af' }}>●</span>{' '}
-              {isSimulated ? 'Mô phỏng' : 'Webcam Live (1 Hand)'}
+              {sessionState === 'idle'
+                ? 'CHỜ KHỞI ĐỘNG CÂU'
+                : sessionState === 'ready_to_finalize'
+                ? 'SẴN SÀNG CHỐT CÂU'
+                : `TỪ ${currentStepIndex + 1}/4`}
             </div>
 
             {hasHandInView && (
               <div
                 className="reticle-badge"
                 style={{
-                  background: liveClassification?.isMatched ? 'rgba(5, 150, 105, 0.92)' : 'rgba(0,0,0,0.65)',
+                  background: liveClassification?.isMatched ? 'rgba(5, 150, 105, 0.92)' : 'rgba(0,0,0,0.68)',
                   color: '#ffffff',
                   border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
                 }}
               >
                 <span>{liveClassification?.detectedPoseName || 'Đang quét...'}</span>
-                {lockProgress > 0 && (
-                  <div className="countdown-ring-container" aria-label={`Tiến độ giữ: ${Math.round(lockProgress * 100)}%`}>
-                    <svg className="countdown-ring-svg" viewBox="0 0 32 32">
-                      <circle className="countdown-ring-bg" cx="16" cy="16" r="13" />
-                      <circle
-                        className="countdown-ring-fill"
-                        cx="16"
-                        cy="16"
-                        r="13"
-                        strokeDasharray={81.68}
-                        strokeDashoffset={81.68 * (1 - lockProgress)}
-                      />
-                    </svg>
-                    <span className="countdown-ring-text">{Math.round(lockProgress * 100)}%</span>
-                  </div>
-                )}
+                {lockProgress > 0 && <span> ({Math.round(lockProgress * 100)}%)</span>}
               </div>
             )}
           </div>
@@ -687,38 +735,59 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
                 border: '1.5px solid #34d399',
               }}
             >
-              {isFinalTarget ? <ThumbsUp size={22} className="text-white" /> : <CheckCircle2 size={22} className="text-white" />}
-              <span>
-                {isFinalTarget
-                  ? `👍 ĐÃ THẢ LIKE! HOÀN THÀNH CÂU`
-                  : `✓ ĐÃ KHỚP: [${lastMatchedGloss || currentStep.gloss}]`}
-              </span>
+              {sessionState === 'ready_to_finalize' ? (
+                <>
+                  <ThumbsUp size={22} className="text-white" />
+                  <span>👍 ĐÃ THẢ LIKE! PHÁT ÂM THANH RA LOA</span>
+                </>
+              ) : sessionState === 'idle' ? (
+                <>
+                  <Play size={22} className="text-white" />
+                  <span>👋 ĐÃ BẮT ĐẦU PHIÊN NHẬP CÂU!</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={22} className="text-white" />
+                  <span>✓ ĐÃ KHỚP: [{lastMatchedGloss || currentStep.gloss}]</span>
+                </>
+              )}
             </div>
           )}
 
-          {/* VISUAL SIGN POSE TUTOR (Typing tutor for hands) */}
+          {/* VISUAL SIGN POSE TUTOR */}
           <div style={{ position: 'absolute', top: '48px', right: '12px', zIndex: 12 }}>
             <HandPoseGuide
-              gloss={currentStep.gloss}
+              gloss={sessionState === 'idle' ? 'Bắt đầu' : sessionState === 'ready_to_finalize' ? 'Thả like' : currentStep.gloss}
               hasHandInView={hasHandInView}
               matchScore={matchScore}
               isMatched={liveClassification?.isMatched ?? false}
               detectedPoseName={liveClassification?.detectedPoseName}
               lockProgress={lockProgress}
+              sessionState={sessionState}
               language={language}
             />
           </div>
 
           {/* Bottom Card: Current Target Word & Advance Trigger */}
           <div className="reticle-bottom">
-            <div className="kinetic-gloss-display" style={{ background: 'rgba(0,0,0,0.82)', border: 'none' }}>
+            <div className="kinetic-gloss-display" style={{ background: 'rgba(0,0,0,0.84)', border: 'none' }}>
               <span className="gloss-sub" style={{ color: '#cbd5e1' }}>
-                {isFinalTarget ? 'KÝ HIỆU KẾT THÚC CÂU' : 'KÝ HIỆU TIẾP THEO'}
+                {sessionState === 'idle'
+                  ? 'GIAI ĐOẠN 0: KHỞI ĐỘNG PHIÊN'
+                  : sessionState === 'ready_to_finalize'
+                  ? 'GIAI ĐOẠN 5: CHỐT CÂU & PHÁT TIẾNG'
+                  : `KÝ HIỆU TIẾP THEO (TỪ ${currentStepIndex + 1}/4)`}
               </span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                <span className="gloss-main" style={{ fontSize: '22px' }}>{currentStep.gloss}</span>
+                <span className="gloss-main" style={{ fontSize: '22px' }}>
+                  {sessionState === 'idle'
+                    ? '👋 Vẫy tay mở chào'
+                    : sessionState === 'ready_to_finalize'
+                    ? '👍 Thả like kết thúc câu'
+                    : currentStep.gloss}
+                </span>
                 <span style={{ fontSize: '12px', color: '#38bdf8', fontWeight: 600 }}>
-                  ({getTargetPoseName(currentStep.gloss)})
+                  ({getTargetPoseName(currentStep.gloss, sessionState)})
                 </span>
               </div>
 
@@ -739,12 +808,19 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
 
             <button
               type="button"
-              className="btn-advance-word"
+              className="btn-hardware"
+              style={{ minHeight: '34px', background: 'rgba(0,0,0,0.8)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.2)' }}
               onClick={handleForceAdvance}
-              title="Khớp nhanh từ này (phím Space)"
+              title="Khớp nhanh bước này (phím Space)"
             >
               <Sparkles size={13} aria-hidden="true" />
-              <span>Tiếp tục [Space]</span>
+              <span>
+                {sessionState === 'idle'
+                  ? 'Bắt đầu ngay [Space]'
+                  : sessionState === 'ready_to_finalize'
+                  ? 'Chốt & Phát tiếng [Space]'
+                  : 'Khớp nhanh [Space]'}
+              </span>
             </button>
           </div>
         </div>
