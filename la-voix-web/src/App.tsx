@@ -565,14 +565,14 @@ export const App: React.FC = () => {
               </div>
               <span className="assembly-strip-counter">
                 {sessionState === 'finalized'
-                  ? (language === 'vi' ? '✓ ĐÃ PHÁT ÂM THANH (1 LẦN THÀNH CÔNG)' : '✓ BROADCAST COMPLETE (ONCE)')
-                  : allTokensAssembled
-                  ? (language === 'vi' ? '✓ ĐỦ 4/4 TỪ · THẢ LIKE 👍 ĐỂ CHỐT' : '✓ 4/4 TOKENS · THUMBS UP TO FINALIZE')
-                  : (language === 'vi' ? `ĐÃ BẮT: ${matchedStepIds.size}/4 TỪ` : `TRACKED: ${matchedStepIds.size}/4`)}
+                  ? (language === 'vi' ? '✓ ĐÃ PHÁT ÂM THANH (5/5 CỬ CHỈ HOÀN TẤT)' : '✓ BROADCAST COMPLETE (5/5 GESTURES)')
+                  : sessionState === 'ready_to_finalize'
+                  ? (language === 'vi' ? '👉 BƯỚC 5/5: THẢ LIKE 👍 ĐỂ CHỐT PHÁT ÂM' : '👉 STEP 5/5: THUMBS UP 👍 TO BROADCAST')
+                  : (language === 'vi' ? `TIẾN TRÌNH: ${matchedStepIds.size}/5 CỬ CHỈ` : `PROGRESS: ${matchedStepIds.size}/5 GESTURES`)}
               </span>
             </div>
 
-            {/* Magnetic Token Snap Track */}
+            {/* Magnetic Token Snap Track (Chuẩn 5 cử chỉ: 4 từ + 1 Thả like) */}
             <div className={`assembly-track ${matchedStepIds.size > 0 ? 'has-tokens' : ''}`}>
               {activeScenario.steps.map((step, idx) => {
                 const isMatched = matchedStepIds.has(step.id);
@@ -601,6 +601,34 @@ export const App: React.FC = () => {
                   </React.Fragment>
                 );
               })}
+
+              {/* Mũi tên kết nối sang cử chỉ thứ 5 */}
+              <span className="assembly-token-connector">→</span>
+
+              {/* Cử chỉ thứ 5: Thả like 👍 chốt câu */}
+              <div
+                className={`assembly-token ${sessionState === 'finalized' ? 'active-token tokenAssemble' : sessionState === 'ready_to_finalize' ? 'token-ready-finalize' : ''}`}
+                style={{
+                  opacity: sessionState === 'finalized' ? 1 : sessionState === 'ready_to_finalize' ? 1 : 0.45,
+                  borderColor: sessionState === 'finalized' ? '#10b981' : sessionState === 'ready_to_finalize' ? 'var(--signal-orange)' : '#cbd5e1',
+                  borderWidth: sessionState === 'ready_to_finalize' ? '2px' : '1px',
+                  background: sessionState === 'ready_to_finalize' ? '#fff7ed' : sessionState === 'finalized' ? '#ecfdf5' : undefined,
+                  cursor: sessionState === 'ready_to_finalize' ? 'pointer' : 'default',
+                }}
+                onClick={() => {
+                  if (sessionState === 'ready_to_finalize') {
+                    handleFinalizeLike();
+                  }
+                }}
+                title={language === 'vi' ? 'Cử chỉ 5: Thả like 👍 để duyệt phát âm ra loa' : 'Gesture 5: Thumbs up 👍 to broadcast'}
+              >
+                <span className="token-index" style={{ color: sessionState === 'ready_to_finalize' ? 'var(--signal-orange)' : undefined }}>05</span>
+                <span className="token-gloss" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>{language === 'vi' ? 'Thả like' : 'Confirm'}</span>
+                  <span>👍</span>
+                </span>
+                {sessionState === 'finalized' && <CheckCircle2 size={12} className="text-emerald-500" />}
+              </div>
             </div>
           </div>
 
