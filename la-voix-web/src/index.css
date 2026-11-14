@@ -1,0 +1,1538 @@
+/* ==========================================================================
+   LA VOIX 2.0 // DEAF ACCESSIBILITY CONSOLE
+   ULIS Hackathon 2026 | Bảng A
+   Aesthetic: Hardware Instrument / Dieter Rams x Teenage Engineering Industrial Craft
+   Zero AI Slop: Raw tactile surfaces, tactile mechanical keycaps, precision optical framing,
+   architectural typography, Swiss grid rhythm, WCAG AAA contrast (>12:1).
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+/* --------------------------------------------------------------------------
+   0. DESIGN TOKENS & HARDWARE PALETTE
+   -------------------------------------------------------------------------- */
+:root {
+  /* Instrument Chassis & Surfaces (Matte Anodized Bone / Warm Industrial Slate) */
+  --chassis-bg: #eceef1;
+  --deck-surface: #f7f8fa;
+  --card-surface: #ffffff;
+  --card-inset: #eef1f4;
+  --panel-border: #d0d7de;
+  --hairline: #e1e4e8;
+  --groove-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  /* Deep High-Legibility Inks (WCAG AAA > 12:1) */
+  --ink-primary: #111827;
+  --ink-secondary: #374151;
+  --ink-muted: #6b7280;
+  --ink-faint: #9ca3af;
+
+  /* Hardware Functional Signal Accents */
+  --signal-orange: #ff5500;       /* Braun / Teenage Engineering primary actuator */
+  --signal-orange-dim: #fff0eb;
+  --signal-orange-border: #ffaa80;
+  
+  --signal-green: #00875a;        /* Dieter Rams Medical Status OK */
+  --signal-green-dim: #e6f4ea;
+  --signal-green-glow: rgba(0, 135, 90, 0.25);
+  
+  --signal-blue: #0052cc;         /* ULIS Academic Blue */
+  --signal-blue-dim: #deebff;
+  
+  --signal-red: #de350b;          /* Emergency / Reset */
+  --signal-red-dim: #ffebe6;
+  
+  --signal-amber: #ff9900;        /* Warning / Safety confirmation */
+
+  /* Viewfinder / Sensor Optical Bed (Technical Studio Slate) */
+  --sensor-bed: #161b22;
+  --sensor-grid: rgba(255, 255, 255, 0.07);
+  --sensor-wireframe: #e6edf3;
+
+  /* Typography */
+  --font-display: 'Space Grotesk', -apple-system, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Hardware Radii & Inset */
+  --radius-chassis: 16px;
+  --radius-card: 10px;
+  --radius-key: 6px;
+  --radius-pill: 9999px;
+
+  /* Physical Button Depth & Tactile Shadows */
+  --key-shadow: 0 3px 0 #cbd5e1, 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+  --key-shadow-active: 0 1px 0 #cbd5e1, inset 0 2px 3px rgba(0, 0, 0, 0.12);
+  --key-orange-shadow: 0 4px 0 #cc4400, 0 6px 12px rgba(255, 85, 0, 0.25);
+  --key-orange-active: 0 1px 0 #cc4400, inset 0 2px 4px rgba(0, 0, 0, 0.2);
+
+  /* Viewport Height & Layout */
+  --header-height: 56px;
+  --footer-height: 38px;
+}
+
+/* --------------------------------------------------------------------------
+   1. RESET & BASE RHYTHM
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  background-color: var(--chassis-bg);
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --------------------------------------------------------------------------
+   2. HARDWARE CHASSIS CONTAINER
+   -------------------------------------------------------------------------- */
+.la-voix-chassis {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   3. HARDWARE CONTROL STRIP (TOP BAR)
+   -------------------------------------------------------------------------- */
+.instrument-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--deck-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 8px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.brand-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--ink-primary);
+  color: #ffffff;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.04em;
+}
+
+.brand-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink-primary);
+}
+
+.brand-edition {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  background: var(--signal-orange);
+  color: #ffffff;
+  border-radius: 4px;
+}
+
+.brand-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* Tactile Mode Switcher (Physical Recessed Rocker) */
+.mode-rocker-track {
+  display: flex;
+  background: var(--card-inset);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--groove-shadow);
+}
+
+.mode-rocker-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 36px;
+}
+
+.mode-rocker-btn:hover {
+  color: var(--ink-primary);
+}
+
+.mode-rocker-btn.active {
+  background: #ffffff;
+  color: var(--ink-primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.mode-rocker-btn .mode-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.mode-rocker-btn.active.med .mode-led {
+  background: var(--signal-red);
+  box-shadow: 0 0 6px rgba(222, 53, 11, 0.6);
+}
+
+.mode-rocker-btn.active.adm .mode-led {
+  background: var(--signal-blue);
+  box-shadow: 0 0 6px rgba(0, 82, 204, 0.6);
+}
+
+/* Hardware Actions Group */
+.strip-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-hardware {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius-key);
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  color: var(--ink-secondary);
+  box-shadow: 0 2px 0 #cbd5e1;
+  cursor: pointer;
+  min-height: 36px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.btn-hardware:hover {
+  background: #f8fafc;
+  color: var(--ink-primary);
+}
+
+.btn-hardware:active {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 transparent;
+}
+
+.btn-hardware.btn-guide {
+  background: var(--signal-orange-dim);
+  border-color: var(--signal-orange-border);
+  color: var(--signal-orange);
+  box-shadow: 0 2px 0 #ffaa80;
+}
+
+.btn-hardware.btn-reset {
+  background: var(--signal-red-dim);
+  border-color: #ffbdad;
+  color: var(--signal-red);
+  box-shadow: 0 2px 0 #ffbdad;
+}
+
+.key-tag {
+  display: inline-block;
+  padding: 1px 4px;
+  font-size: 9px;
+  background: var(--card-inset);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  color: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   4. TWO-PANEL WORKSPACE GRID (52% / 48% Balanced)
+   -------------------------------------------------------------------------- */
+.workspace-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 920px) {
+  .workspace-deck {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   5. LEFT CONSOLE: SENSOR VIEWPORT & STEP SEQUENCER
+   -------------------------------------------------------------------------- */
+.left-console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The Optical Sensor Deck */
+.sensor-chassis {
+  background: var(--deck-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.sensor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sensor-title-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sensor-indicator-light {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal-green);
+  box-shadow: 0 0 6px var(--signal-green-glow);
+}
+
+.sensor-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.sensor-switch-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Optical Screen Frame */
+.viewfinder-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 380px;
+  background: var(--sensor-bed);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #2d333b;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Viewfinder Match Flash ("Nháy 1 cái" khi nhận diện thành công) */
+@keyframes matchFlashBorder {
+  0% {
+    border-color: #10b981;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.4), inset 0 0 28px rgba(16, 185, 129, 0.35);
+  }
+  50% {
+    border-color: #34d399;
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.65), inset 0 0 45px rgba(16, 185, 129, 0.5);
+  }
+  100% {
+    border-color: #2d333b;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+}
+
+.viewfinder-frame.flash,
+.viewfinder-frame.match-flash,
+.viewfinder-frame.is-flashing {
+  animation: matchFlashBorder 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.viewfinder-flash-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.35) 0%, rgba(5, 150, 105, 0.15) 70%, transparent 100%);
+  pointer-events: none;
+  z-index: 15;
+  animation: matchFlashFade 0.4s ease-out forwards;
+}
+
+@keyframes matchFlashFade {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.viewfinder-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.viewfinder-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
+}
+
+/* Viewfinder Precision Overlay HUD */
+.viewfinder-reticle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.reticle-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reticle-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  background: rgba(22, 27, 34, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e6edf3;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+}
+
+/* Green Match Indicator HUD Badge */
+.reticle-badge.match-success,
+.match-indicator-badge {
+  background: rgba(5, 150, 105, 0.95);
+  border: 1px solid #34d399;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+  font-weight: 700;
+  animation: matchBadgePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.match-toast-banner {
+  align-self: center;
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: rgba(5, 150, 105, 0.95);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  backdrop-filter: blur(6px);
+  animation: matchPopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid #34d399;
+}
+
+@keyframes matchPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes matchBadgePop {
+  0% { transform: scale(0.9); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.reticle-coords {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #7d8590;
+  letter-spacing: 0.02em;
+}
+
+.reticle-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+/* ==========================================================================
+   HAND POSE GUIDE PANEL (VISUAL SIGN TUTOR / TYPING TUTOR FOR SIGNS)
+   ========================================================================== */
+.hand-pose-guide-panel {
+  pointer-events: auto;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.hand-pose-guide-panel.prominent-mode {
+  width: 250px;
+  padding: 10px 12px;
+  animation: guideFadeIn 0.3s ease-out;
+}
+
+.hand-pose-guide-panel.compact-mode {
+  width: 175px;
+  padding: 6px 10px;
+  opacity: 0.92;
+}
+
+@keyframes guideFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.guide-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pose-svg-box {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+}
+
+.prominent-mode .pose-svg-box {
+  width: 62px;
+  height: 62px;
+}
+
+.compact-mode .pose-svg-box {
+  width: 40px;
+  height: 40px;
+}
+
+.pose-svg {
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+}
+
+.pose-info-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pose-target-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.pose-type-tag {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pose-gloss-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.pose-instruction-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fdba74;
+  line-height: 1.25;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-mode .pose-instruction-text {
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+
+.pose-call-to-action {
+  font-size: 10px;
+  color: #cbd5e1;
+  line-height: 1.2;
+  font-style: italic;
+}
+
+.pose-match-status {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.match-meter-bar {
+  height: 100%;
+  transition: width 0.08s ease-out, background-color 0.15s ease;
+}
+
+/* Kinetic Gloss Display & Bottom HUD */
+.kinetic-gloss-display {
+  display: flex;
+  flex-direction: column;
+  background: rgba(22, 27, 34, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 6px 12px;
+  backdrop-filter: blur(6px);
+}
+
+.gloss-sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #7d8590;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gloss-main {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Analog VU Meter / Motion Gate Bar */
+.vu-meter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  background: var(--card-inset);
+  border-radius: 6px;
+  border: 1px solid var(--hairline);
+}
+
+.vu-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.vu-track {
+  position: relative;
+  flex: 1;
+  height: 10px;
+  background: #cbd5e1;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.vu-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--signal-green) 0%, var(--signal-amber) 70%, var(--signal-red) 100%);
+  border-radius: 3px;
+  transition: width 0.08s ease;
+}
+
+.vu-notch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 30%;
+  width: 2px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.vu-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--signal-green-dim);
+  color: var(--signal-green);
+}
+
+.vu-status.idle {
+  background: #e2e8f0;
+  color: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   6. PHYSICAL STEP SEQUENCER (Hardware Keycaps)
+   -------------------------------------------------------------------------- */
+.sequencer-chassis {
+  background: var(--deck-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.sequencer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.sequencer-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-secondary);
+}
+
+.sequencer-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
+.keycap-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.keycap-btn {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  box-shadow: var(--key-shadow);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  min-height: 64px;
+  text-align: left;
+}
+
+.keycap-btn:hover {
+  background: #fafbfc;
+}
+
+.keycap-btn.active {
+  background: #ffffff;
+  border-color: var(--signal-orange);
+  box-shadow: 0 3px 0 var(--signal-orange), 0 4px 8px rgba(255, 85, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.keycap-btn.completed {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.keycap-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.keycap-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+
+.keycap-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e2e8f0;
+}
+
+.keycap-btn.active .keycap-led {
+  background: var(--signal-orange);
+  box-shadow: 0 0 6px rgba(255, 85, 0, 0.8);
+}
+
+.keycap-btn.completed .keycap-led {
+  background: var(--signal-green);
+}
+
+.keycap-gloss {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-primary);
+  line-height: 1.2;
+}
+
+.keycap-sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   6.5. SENTENCE ASSEMBLY STRIP & TOKEN ASSEMBLE ANIMATION
+   Magnetic tactile tiles snapping into a sentence track ("Ghép câu hoàn chỉnh")
+   -------------------------------------------------------------------------- */
+.sentence-assembly-chassis,
+.sentence-assembly-strip {
+  background: var(--deck-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 12px 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assembly-strip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assembly-strip-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.assembly-strip-counter {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-key);
+  background: var(--card-inset);
+  border: 1px solid var(--hairline);
+  color: var(--signal-green);
+}
+
+/* The Magnetic Track Channel */
+.assembly-track {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--card-inset);
+  border: 1.5px dashed #cbd5e1;
+  border-radius: var(--radius-key);
+  min-height: 56px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.assembly-track.has-tokens {
+  border-style: solid;
+  border-color: #a3e6cd;
+  background: #f0faf5;
+}
+
+/* Individual Magnetic Token Tile */
+.assembly-token,
+.assembly-token-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  box-shadow: 0 3px 0 var(--signal-green), 0 2px 4px rgba(0, 0, 0, 0.06);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink-primary);
+  letter-spacing: 0.01em;
+  user-select: none;
+  animation: tokenAssemble 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  position: relative;
+}
+
+/* Magnetic Token Snap Animation */
+@keyframes tokenAssemble {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) scale(1.18);
+    box-shadow: 0 12px 24px rgba(0, 135, 90, 0.35);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    box-shadow: 0 3px 0 var(--signal-green), 0 2px 4px rgba(0, 0, 0, 0.06);
+  }
+}
+
+.assembly-token .token-index {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--signal-green);
+  background: var(--signal-green-dim);
+  border: 1px solid #a3e6cd;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.assembly-token .token-gloss {
+  font-weight: 800;
+  color: var(--ink-primary);
+}
+
+.assembly-token.active-token {
+  border-color: var(--signal-green);
+  background: #ffffff;
+}
+
+.assembly-token-connector {
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-weight: 700;
+  user-select: none;
+}
+
+/* Assembly Empty Hint */
+.assembly-empty-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Assembled Full Sentence Banner */
+.assembled-sentence-card {
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.assembled-sentence-vi {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-primary);
+  line-height: 1.4;
+}
+
+.assembled-sentence-en {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   7. TACTILE MODIFIER KEYPAD (Clinical Touch Cards)
+   -------------------------------------------------------------------------- */
+.modifier-chassis {
+  background: var(--deck-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.modifier-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-secondary);
+  margin-bottom: 8px;
+}
+
+.modifier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.modifier-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  box-shadow: var(--key-shadow);
+  cursor: pointer;
+  min-height: 44px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  transition: all 0.1s ease;
+}
+
+.modifier-key:hover {
+  background: #f8fafc;
+  color: var(--ink-primary);
+}
+
+.modifier-key.active {
+  background: #fff8f5;
+  border-color: var(--signal-orange);
+  color: var(--signal-orange);
+  box-shadow: var(--key-shadow-active);
+  transform: translateY(2px);
+}
+
+.modifier-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   8. RIGHT CONSOLE: TELEPROMPTER, BROADCAST ACTUATOR & REVERSE STATION
+   -------------------------------------------------------------------------- */
+.right-console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The Safety Confirmation Teleprompter Card */
+.teleprompter-card {
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.teleprompter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed var(--hairline);
+  padding-bottom: 8px;
+}
+
+.teleprompter-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--signal-orange);
+  background: var(--signal-orange-dim);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.safety-notice {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
+.synthesized-text-box {
+  margin-bottom: 14px;
+}
+
+.synthesized-sentence-vi {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink-primary);
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.synthesized-sentence-en {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+
+/* Master Hardware Broadcast Actuator Button */
+.broadcast-actuator-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 20px;
+  background: var(--signal-orange);
+  color: #ffffff;
+  border: 2px solid #cc4400;
+  border-radius: 8px;
+  box-shadow: var(--key-orange-shadow);
+  cursor: pointer;
+  min-height: 52px;
+  transition: all 0.1s ease;
+}
+
+.broadcast-actuator-btn:hover {
+  background: #ff661a;
+}
+
+.broadcast-actuator-btn:active {
+  transform: translateY(3px);
+  box-shadow: var(--key-orange-active);
+}
+
+.broadcast-main-text {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.broadcast-key-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+/* Equalizer Visualizer during audio playback */
+.equalizer-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
+}
+
+.eq-bar {
+  width: 3px;
+  background: #ffffff;
+  border-radius: 2px;
+  animation: eqBounce 0.5s ease-in-out infinite alternate;
+}
+
+.eq-bar:nth-child(2) { animation-delay: 0.15s; }
+.eq-bar:nth-child(3) { animation-delay: 0.3s; }
+.eq-bar:nth-child(4) { animation-delay: 0.1s; }
+
+@keyframes eqBounce {
+  0% { height: 4px; }
+  100% { height: 18px; }
+}
+
+/* --------------------------------------------------------------------------
+   9. REVERSE CHANNEL (Doctor/Officer -> Deaf User Flashcards)
+   -------------------------------------------------------------------------- */
+.reverse-station-card {
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.reverse-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed var(--hairline);
+  padding-bottom: 8px;
+}
+
+.reverse-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--signal-blue);
+  background: var(--signal-blue-dim);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.doctor-input-strip {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.doctor-text-input {
+  flex: 1;
+  padding: 8px 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  background: var(--card-inset);
+  color: var(--ink-primary);
+  min-height: 40px;
+}
+
+.doctor-text-input:focus {
+  outline: 2px solid var(--signal-blue);
+  background: #ffffff;
+}
+
+.mic-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  box-shadow: 0 2px 0 #cbd5e1;
+  cursor: pointer;
+  color: var(--ink-secondary);
+}
+
+.mic-toggle-btn.listening {
+  background: var(--signal-red-dim);
+  color: var(--signal-red);
+  border-color: #ffbdad;
+  box-shadow: 0 0 8px rgba(222, 53, 11, 0.4);
+}
+
+/* Quick Response Preset Chips */
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.preset-chip {
+  padding: 5px 10px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--card-inset);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-secondary);
+  transition: all 0.1s ease;
+}
+
+.preset-chip:hover {
+  background: #e2e8f0;
+  color: var(--ink-primary);
+}
+
+/* VSL Graphic Flashcards Gallery */
+.vsl-cards-deck {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.vsl-flashcard {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--deck-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  position: relative;
+  transition: border-color 0.15s ease;
+}
+
+.vsl-flashcard.matched {
+  border-color: var(--signal-blue);
+  background: #f0f7ff;
+}
+
+.flashcard-fig-num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.flashcard-keyword {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink-primary);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.flashcard-action {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--ink-secondary);
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.flashcard-ack-btn {
+  margin-top: auto;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.1s ease;
+}
+
+.flashcard-ack-btn:hover {
+  background: var(--signal-green-dim);
+  color: var(--signal-green);
+  border-color: #a3e6cd;
+}
+
+.flashcard-ack-btn.checked {
+  background: var(--signal-green);
+  color: #ffffff;
+  border-color: var(--signal-green);
+}
+
+/* --------------------------------------------------------------------------
+   10. HARDWARE STATUS STRIP (FOOTER)
+   -------------------------------------------------------------------------- */
+.hardware-footer-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background: var(--deck-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-key);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.footer-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.footer-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--signal-green);
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   11. NATIVE DIALOG (MODERN WEB GUIDANCE)
+   -------------------------------------------------------------------------- */
+dialog:modal {
+  margin: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+  max-width: 680px;
+  width: 90vw;
+  max-height: 85vh;
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  background: rgba(17, 24, 39, 0.55);
+  backdrop-filter: blur(4px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 12px;
+}
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.guide-step-item {
+  display: flex;
+  gap: 14px;
+  padding: 12px;
+  background: var(--card-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-key);
+  margin-bottom: 10px;
+}
+
+.guide-step-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--signal-orange);
+  white-space: nowrap;
+}
+
+.guide-step-content h4 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-primary);
+  margin-bottom: 3px;
+}
+
+.guide-step-content p {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
