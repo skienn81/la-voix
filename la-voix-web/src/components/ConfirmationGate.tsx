@@ -25,6 +25,7 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
   const [hasConfirmed, setHasConfirmed] = useState<boolean>(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const lastSpeakTimeRef = useRef<number>(0);
 
   const updateVoices = useCallback(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -45,59 +46,81 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
     };
   }, [updateVoices]);
 
-  // Construct dynamic auto-completed prediction text based on tracked tokens
+  // Dynamic AI Auto-complete predictions for all 4 clinical scenarios
   const predictiveCompletion = useMemo(() => {
-    const isMed = scenario.id === 'medical';
+    const scId = scenario.id;
 
     if (matchedStepCount === 0) {
+      let preview = 'Tôi bị đau quặn bụng...';
+      if (scId === 'cardio') preview = 'Tôi bị đau thắt nghẹn vùng ngực...';
+      if (scId === 'allergy') preview = 'Tôi bị dị ứng thức ăn sưng nghẽn...';
+      if (scId === 'admin') preview = 'Tôi là sinh viên cần giúp đỡ...';
+
       return {
         confirmedPart: '',
-        ghostPart: isMed
-          ? (language === 'vi' ? 'Đang chờ ký hiệu... (Tôi bị đau quặn bụng...)' : 'Waiting for sign... (I have abdominal pain...)')
-          : (language === 'vi' ? 'Đang chờ ký hiệu... (Tôi là sinh viên cần giúp đỡ...)' : 'Waiting for sign... (I am a student needing...)'),
+        ghostPart: language === 'vi' ? `Đang chờ ký hiệu... (${preview})` : 'Waiting for gesture signs...',
         isFull: false,
       };
     }
 
     if (matchedStepCount === 1) {
+      let ghost = ' [bị đau quặn bụng dữ dội...]';
+      if (scId === 'cardio') ghost = ' [bị đau thắt nghẹn vùng ngực lan xuống tay...]';
+      if (scId === 'allergy') ghost = ' [bị dị ứng thức ăn sưng nghẽn họng...]';
+      if (scId === 'admin') ghost = ' [là sinh viên cần giúp đỡ thủ tục...]';
+
       return {
         confirmedPart: language === 'vi' ? 'Tôi' : 'I',
-        ghostPart: isMed
-          ? (language === 'vi' ? ' [bị đau quặn bụng dữ dội từ hôm qua...]' : ' [have severe cramping abdominal pain...]')
-          : (language === 'vi' ? ' [là sinh viên cần giúp đỡ thủ tục...]' : ' [am a student needing assistance...]'),
+        ghostPart: language === 'vi' ? ghost : ' [needing clinical attention...]',
         isFull: false,
       };
     }
 
     if (matchedStepCount === 2) {
+      let confirmed = 'Tôi bị đau';
+      let ghost = ' [quặn bụng dữ dội từ hôm qua...]';
+      if (scId === 'cardio') {
+        confirmed = 'Tôi bị đau ngực';
+        ghost = ' [thắt nghẹn lan xuống cánh tay trái...]';
+      } else if (scId === 'allergy') {
+        confirmed = 'Tôi bị dị ứng';
+        ghost = ' [sưng nghẽn họng, khó thở...]';
+      } else if (scId === 'admin') {
+        confirmed = 'Tôi cần';
+        ghost = ' [giúp đỡ làm thủ tục khai báo...]';
+      }
+
       return {
-        confirmedPart: isMed
-          ? (language === 'vi' ? 'Tôi bị đau' : 'I have pain')
-          : (language === 'vi' ? 'Tôi là sinh viên cần' : 'I am a student needing'),
-        ghostPart: isMed
-          ? (language === 'vi' ? ' [quặn bụng dữ dội từ hôm qua...]' : ' [cramping abdominal pain since yesterday...]')
-          : (language === 'vi' ? ' [giúp đỡ làm thủ tục khai báo...]' : ' [assistance with declaration procedures...]'),
+        confirmedPart: language === 'vi' ? confirmed : 'I am experiencing symptoms',
+        ghostPart: language === 'vi' ? ghost : ' [acute progression...]',
         isFull: false,
       };
     }
 
     if (matchedStepCount === 3) {
+      let confirmed = 'Tôi bị đau quặn bụng';
+      let ghost = ' [dữ dội từ hôm qua...]';
+      if (scId === 'cardio') {
+        confirmed = 'Tôi bị đau thắt nghẹn ngực';
+        ghost = ' [lan xuống cánh tay trái, khó thở...]';
+      } else if (scId === 'allergy') {
+        confirmed = 'Tôi bị dị ứng sưng nghẽn họng';
+        ghost = ' [khó nuốt và chóng mặt choáng váng...]';
+      } else if (scId === 'admin') {
+        confirmed = 'Tôi cần giúp đỡ';
+        ghost = ' [làm thủ tục khai báo và xin cấp giấy...]';
+      }
+
       return {
-        confirmedPart: isMed
-          ? (language === 'vi' ? 'Tôi bị đau quặn bụng' : 'I have severe cramping abdominal pain')
-          : (language === 'vi' ? 'Tôi là sinh viên cần giúp đỡ' : 'I am a student needing assistance'),
-        ghostPart: isMed
-          ? (language === 'vi' ? ' [dữ dội từ hôm qua...]' : ' [since yesterday...]')
-          : (language === 'vi' ? ' [làm thủ tục khai báo...]' : ' [with declaration procedures...]'),
+        confirmedPart: language === 'vi' ? confirmed : 'I have severe condition',
+        ghostPart: language === 'vi' ? ghost : ' [requiring urgent evaluation...]',
         isFull: false,
       };
     }
 
-    // 4 or more tokens matched: Full completed sentence!
-    const baseVi = scenario.baseSentenceVi;
-    const baseEn = scenario.baseSentenceEn;
+    // 4 tokens assembled: 100% full completed sentence!
     return {
-      confirmedPart: language === 'vi' ? baseVi : baseEn,
+      confirmedPart: language === 'vi' ? scenario.baseSentenceVi : scenario.baseSentenceEn,
       ghostPart: '',
       isFull: true,
     };
@@ -117,7 +140,7 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
     }
   }, [scenario, selectedTouchCards, language]);
 
-  // Handle Speech Synthesis
+  // Handle Speech Synthesis (with spam debounce)
   const handleSpeak = useCallback(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       alert(
@@ -127,6 +150,13 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
       );
       return;
     }
+
+    const now = Date.now();
+    // Prevent repeated speech spamming within 2.5 seconds
+    if (now - lastSpeakTimeRef.current < 2500) {
+      return;
+    }
+    lastSpeakTimeRef.current = now;
 
     window.speechSynthesis.cancel();
 
@@ -202,9 +232,8 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
         </span>
       </div>
 
-      {/* AI AUTO-COMPLETE PREDICTION BOX (WITH DYNAMIC ANIMATION) */}
+      {/* AI AUTO-COMPLETE PREDICTION BOX */}
       <div className={`synthesized-text-box ${isCompletedReady ? 'box-complete' : 'box-predicting'}`}>
-        {/* Status Chip */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Sparkles size={14} className={isCompletedReady ? 'text-emerald-500' : 'text-cyan-500 animate-pulse'} />
@@ -221,7 +250,7 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
           )}
         </div>
 
-        {/* Dynamic Sentence Text with Typing / Fade Animation */}
+        {/* Dynamic Sentence Text */}
         <div className="synthesized-sentence-vi" style={{ minHeight: '52px', fontSize: '18px', lineHeight: 1.4 }}>
           <span style={{ color: '#0f172a', fontWeight: 800 }}>
             {predictiveCompletion.confirmedPart}
@@ -281,7 +310,7 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
       {isCompletedReady && (
         <div style={{ marginTop: '6px', textAlign: 'center', fontSize: '11px', color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
           <CheckCircle2 size={13} />
-          <span>{language === 'vi' ? 'Bệnh nhân thấy chuẩn ý: Bấm phím C để phát tiếng ra loa Bác sĩ' : 'Intention verified: Press C to broadcast'}</span>
+          <span>{language === 'vi' ? 'Bệnh nhân thấy chuẩn ý: Bấm phím C hoặc Thả like 👍 để phát tiếng' : 'Intention verified: Press C or Thumbs Up to broadcast'}</span>
         </div>
       )}
     </div>

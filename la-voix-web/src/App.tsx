@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Stethoscope,
+  HeartPulse,
+  AlertTriangle,
   GraduationCap,
   ShieldCheck,
   RotateCcw,
@@ -15,7 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
-import { Language, TouchCard, GestureStep } from './types';
+import { Language, TouchCard, GestureStep, ScenarioId } from './types';
 import { scenarios, scenarioReverseCards } from './data/scenarios';
 import { CameraTracker, SessionState } from './components/CameraTracker';
 import { ConfirmationGate } from './components/ConfirmationGate';
@@ -41,7 +43,7 @@ const getTouchCardIcon = (iconName: string) => {
 };
 
 export const App: React.FC = () => {
-  const [scenarioId, setScenarioId] = useState<'medical' | 'admin'>('medical');
+  const [scenarioId, setScenarioId] = useState<ScenarioId>('medical');
   const [language, setLanguage] = useState<Language>('vi');
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
   const [completedStepIds, setCompletedStepIds] = useState<Set<string>>(new Set());
@@ -63,7 +65,7 @@ export const App: React.FC = () => {
   const activeScenario = scenarios[scenarioId];
   const activeReverseCards = scenarioReverseCards[scenarioId];
 
-  // Reset or initialize session state on scenario change
+  // Reset session state on scenario switch
   useEffect(() => {
     setCurrentStepIndex(0);
     setCompletedStepIds(new Set());
@@ -128,15 +130,15 @@ export const App: React.FC = () => {
     });
   }, [activeScenario.steps]);
 
-  // Handle Session Start Wake
   const handleSessionStart = useCallback(() => {
     setSessionState('recording');
     setCurrentStepIndex(0);
   }, []);
 
-  // Handle Final Thumbs Up -> Speak Aloud!
+  // Handle Final Thumbs Up: Trigger speech ONCE and switch to 'finalized' state!
   const handleFinalizeLike = useCallback(() => {
-    // Automatically trigger speech broadcast via phím C
+    setSessionState('finalized');
+    // Trigger speech synthesis ONCE
     const event = new KeyboardEvent('keydown', { key: 'c', bubbles: true });
     window.dispatchEvent(event);
   }, []);
@@ -161,7 +163,7 @@ export const App: React.FC = () => {
 
     setResetFeedback(
       language === 'vi'
-        ? 'Zero-Retention: Bộ nhớ phiên đã được giải phóng hoàn toàn theo Luật 91/2025/QH15!'
+        ? 'Zero-Retention: Bộ nhớ phiên đã giải phóng sạch sẽ (Luật 91/2025/QH15)!'
         : 'Zero-Retention: Memory purged compliant with Law 91/2025/QH15!'
     );
     if (resetTimeoutRef.current) {
@@ -170,10 +172,10 @@ export const App: React.FC = () => {
     resetTimeoutRef.current = window.setTimeout(() => {
       setResetFeedback(null);
       resetTimeoutRef.current = null;
-    }, 3000);
+    }, 2800);
   }, [language]);
 
-  // Global Keyboard Shortcuts
+  // Global Keyboard Shortcuts (1: Bụng, 2: Tim, 3: Dị ứng, 4: Hành chính)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
@@ -184,6 +186,8 @@ export const App: React.FC = () => {
         e.preventDefault();
         if (sessionState === 'ready_to_finalize') {
           handleFinalizeLike();
+        } else if (sessionState === 'finalized') {
+          handleZeroRetentionReset();
         } else {
           handleNextStep();
         }
@@ -196,6 +200,10 @@ export const App: React.FC = () => {
       } else if (e.key === '1') {
         setScenarioId('medical');
       } else if (e.key === '2') {
+        setScenarioId('cardio');
+      } else if (e.key === '3') {
+        setScenarioId('allergy');
+      } else if (e.key === '4') {
         setScenarioId('admin');
       }
     };
@@ -206,7 +214,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="la-voix-chassis">
-      {/* 1. TOP INSTRUMENT STRIP */}
+      {/* 1. TOP INSTRUMENT STRIP (SCENARIO SELECTOR 1-4) */}
       <header className="instrument-strip" role="banner">
         <div className="brand-section">
           <div className="brand-badge" aria-hidden="true">LV</div>
@@ -223,40 +231,64 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Mode Rocker Switch */}
-        <nav className="mode-rocker-track" aria-label="Mode Selection">
+        {/* 4 Multi-Clinical Scenario Rocker Tabs */}
+        <nav className="mode-rocker-track" aria-label="Mode Selection" style={{ display: 'flex', gap: '4px' }}>
           <button
             type="button"
             className={`mode-rocker-btn med ${scenarioId === 'medical' ? 'active' : ''}`}
             onClick={() => setScenarioId('medical')}
-            aria-label="Select Medical Emergency Scenario"
+            title="Ca 1: Cấp cứu Đau bụng cấp (Phím 1)"
           >
             <span className="mode-led" aria-hidden="true" />
-            <Stethoscope size={14} aria-hidden="true" />
-            <span>{language === 'vi' ? '01 Cấp cứu Y tế' : '01 Medical ER'}</span>
+            <Stethoscope size={13} aria-hidden="true" />
+            <span>01 Đau bụng</span>
             <span className="key-tag">1</span>
+          </button>
+
+          <button
+            type="button"
+            className={`mode-rocker-btn med ${scenarioId === 'cardio' ? 'active' : ''}`}
+            onClick={() => setScenarioId('cardio')}
+            title="Ca 2: Cấp cứu Đau thắt ngực & Tim mạch (Phím 2)"
+          >
+            <span className="mode-led" aria-hidden="true" />
+            <HeartPulse size={13} aria-hidden="true" />
+            <span>02 Tim mạch</span>
+            <span className="key-tag">2</span>
+          </button>
+
+          <button
+            type="button"
+            className={`mode-rocker-btn med ${scenarioId === 'allergy' ? 'active' : ''}`}
+            onClick={() => setScenarioId('allergy')}
+            title="Ca 3: Cấp cứu Dị ứng phản vệ & Nghẹt thở (Phím 3)"
+          >
+            <span className="mode-led" aria-hidden="true" />
+            <AlertTriangle size={13} aria-hidden="true" />
+            <span>03 Dị ứng</span>
+            <span className="key-tag">3</span>
           </button>
 
           <button
             type="button"
             className={`mode-rocker-btn adm ${scenarioId === 'admin' ? 'active' : ''}`}
             onClick={() => setScenarioId('admin')}
-            aria-label="Select ULIS Student Admin Scenario"
+            title="Ca 4: Hành chính Một cửa ULIS (Phím 4)"
           >
             <span className="mode-led" aria-hidden="true" />
-            <GraduationCap size={14} aria-hidden="true" />
-            <span>{language === 'vi' ? '02 Hành chính ULIS' : '02 ULIS Admin'}</span>
-            <span className="key-tag">2</span>
+            <GraduationCap size={13} aria-hidden="true" />
+            <span>04 ULIS</span>
+            <span className="key-tag">4</span>
           </button>
         </nav>
 
-        {/* Hardware Action Buttons */}
+        {/* Actions */}
         <div className="strip-actions">
           <button
             type="button"
             className="btn-hardware"
             onClick={() => setLanguage((prev) => (prev === 'vi' ? 'en' : 'vi'))}
-            title="Toggle Language (VI / EN)"
+            title="Đổi ngôn ngữ (VI / EN)"
             aria-label="Toggle language"
           >
             <LanguagesIcon size={14} aria-hidden="true" />
@@ -278,7 +310,7 @@ export const App: React.FC = () => {
             type="button"
             className="btn-hardware btn-reset"
             onClick={handleZeroRetentionReset}
-            title="Reset session (Law 91/2025/QH15)"
+            title="Xóa phiên (Luật 91/2025/QH15)"
             aria-label="Reset session"
           >
             <RotateCcw size={14} aria-hidden="true" />
@@ -312,74 +344,8 @@ export const App: React.FC = () => {
 
       {/* 2. MINIMALIST TWO-PANEL WORKSPACE GRID */}
       <main className="workspace-deck" role="main">
-        {/* LEFT CONSOLE: WEBCAM TRACKER & CLEAN SENTENCE STRIP */}
+        {/* LEFT CONSOLE: WEBCAM TRACKER & CLEAN TOKEN STRIP */}
         <div className="left-console">
-          {/* SIGN PROTOCOL PIPELINE (6 GIAI ĐOẠN HOÀN CHỈNH) */}
-          <div className="sign-protocol-strip" role="navigation" aria-label="Sign Protocol Pipeline" style={{ marginBottom: '8px' }}>
-            {/* Stage 0: Khởi động */}
-            <div
-              className={`protocol-step-item stage-start ${
-                sessionState === 'idle' ? 'active' : 'completed'
-              }`}
-              onClick={() => setSessionState('idle')}
-              title="Giai đoạn 0: Vẫy tay chào hoặc ✌️ để khởi động phiên"
-              style={{ cursor: 'pointer' }}
-            >
-              <span>👋</span>
-              <span>0. Khởi động</span>
-              {sessionState !== 'idle' && <CheckCircle2 size={11} className="text-emerald-500" />}
-            </div>
-
-            <span className="protocol-arrow">→</span>
-
-            {/* Stages 1 to 4: 4 gesture words */}
-            {activeScenario.steps.map((step, idx) => {
-              const stageNum = idx + 1;
-              const isMatched = matchedStepIds.has(step.id);
-              const isCurrent = sessionState === 'recording' && currentStepIndex === idx;
-              const gestureIcon = idx === 0 ? '☝️' : idx === 1 ? '✊' : idx === 2 ? '🖐️' : '👈';
-
-              return (
-                <React.Fragment key={step.id}>
-                  <div
-                    className={`protocol-step-item ${isCurrent ? 'active' : ''} ${isMatched ? 'completed' : ''}`}
-                    onClick={() => {
-                      setSessionState('recording');
-                      setCurrentStepIndex(idx);
-                      setCompletedStepIds((prev) => new Set([...prev, step.id]));
-                      setMatchedStepIds((prev) => new Set([...prev, step.id]));
-                    }}
-                    title={`Giai đoạn ${stageNum}: ${step.gloss}`}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <span>{gestureIcon}</span>
-                    <span>0{stageNum}. {language === 'vi' ? step.gloss : step.glossEn}</span>
-                    {isMatched && <CheckCircle2 size={11} className="text-emerald-500" />}
-                  </div>
-                  <span className="protocol-arrow">→</span>
-                </React.Fragment>
-              );
-            })}
-
-            {/* Stage 5: Thả Like Chốt & Tự động phát âm */}
-            <div
-              className={`protocol-step-item stage-thumbsup ${
-                sessionState === 'ready_to_finalize' ? 'active' : ''
-              }`}
-              onClick={() => {
-                if (allTokensAssembled) {
-                  setSessionState('ready_to_finalize');
-                }
-              }}
-              title="Giai đoạn 5: Thả like 👍 để chốt câu và tự động phát âm thanh ra loa Bác sĩ"
-              style={{ cursor: allTokensAssembled ? 'pointer' : 'default' }}
-            >
-              <span>👍</span>
-              <span>5. Chốt & Phát</span>
-              {sessionState === 'ready_to_finalize' && <Sparkles size={11} className="text-emerald-500" />}
-            </div>
-          </div>
-
           {/* SENSOR CAMERA / VIEWFINDER */}
           <CameraTracker
             currentStep={currentStep}
@@ -387,12 +353,13 @@ export const App: React.FC = () => {
             sessionState={sessionState}
             onSessionStart={handleSessionStart}
             onFinalizeLike={handleFinalizeLike}
+            onResetSession={handleZeroRetentionReset}
             language={language}
             onAutoAdvance={handleAutoAdvance}
             onTokenMatched={handleTokenMatched}
           />
 
-          {/* DẢI GHÉP CÂU TỰ ĐỘNG (CLEAN SENTENCE ASSEMBLY STRIP) */}
+          {/* DẢI GHÉP KÝ HIỆU THỜI GIAN THỰC */}
           <div className="sentence-assembly-chassis" style={{ marginTop: '10px' }}>
             <div className="assembly-strip-header">
               <div className="assembly-strip-title">
@@ -400,7 +367,9 @@ export const App: React.FC = () => {
                 <span>{language === 'vi' ? 'Dải Ghép Ký Hiệu Thời Gian Thực' : 'Real-time Token Snap Strip'}</span>
               </div>
               <span className="assembly-strip-counter">
-                {allTokensAssembled
+                {sessionState === 'finalized'
+                  ? (language === 'vi' ? '✓ ĐÃ PHÁT ÂM THANH (1 LẦN THÀNH CÔNG)' : '✓ BROADCAST COMPLETE (ONCE)')
+                  : allTokensAssembled
                   ? (language === 'vi' ? '✓ ĐỦ 4/4 TỪ · THẢ LIKE 👍 ĐỂ CHỐT' : '✓ 4/4 TOKENS · THUMBS UP TO FINALIZE')
                   : (language === 'vi' ? `ĐÃ BẮT: ${matchedStepIds.size}/4 TỪ` : `TRACKED: ${matchedStepIds.size}/4`)}
               </span>
@@ -410,7 +379,7 @@ export const App: React.FC = () => {
             <div className={`assembly-track ${matchedStepIds.size > 0 ? 'has-tokens' : ''}`}>
               {activeScenario.steps.map((step, idx) => {
                 const isMatched = matchedStepIds.has(step.id);
-                const isCurrent = idx === currentStepIndex;
+                const isCurrent = idx === currentStepIndex && sessionState === 'recording';
                 return (
                   <React.Fragment key={step.id}>
                     {idx > 0 && <span className="assembly-token-connector">→</span>}
@@ -441,7 +410,7 @@ export const App: React.FC = () => {
           {/* TACTILE MODIFIER KEYPAD (TOUCH CARDS) */}
           <div className="modifier-chassis" style={{ marginTop: '10px' }}>
             <div className="modifier-title">
-              {language === 'vi' ? 'Bổ trợ Triệu chứng Lâm sàng (Chạm nhanh)' : 'Clinical Modifier Matrix'}
+              {language === 'vi' ? 'Bổ trợ Triệu chứng Cấp cứu (Chạm nhanh)' : 'Clinical Emergency Modifiers'}
             </div>
             <div className="modifier-grid">
               {activeScenario.touchCards.map((card) => {
@@ -499,7 +468,7 @@ export const App: React.FC = () => {
           </div>
         </div>
         <div className="footer-right">
-          <span>SHORTCUTS: [SPACE] BƯỚC · [C] DUYỆT PHÁT ÂM · [R] XÓA PHIÊN · [G] KỊCH BẢN</span>
+          <span>PHÍM TẮT: [1-4] ĐỔI CA BỆNH · [SPACE] BƯỚC · [C] DUYỆT PHÁT ÂM · [R] XÓA PHIÊN · [G] KỊCH BẢN</span>
         </div>
       </footer>
 

@@ -8,7 +8,7 @@ interface HandPoseGuideProps {
   isMatched: boolean;
   detectedPoseName?: string;
   lockProgress?: number;
-  sessionState?: 'idle' | 'recording' | 'ready_to_finalize';
+  sessionState?: 'idle' | 'recording' | 'ready_to_finalize' | 'finalized';
   language: 'vi' | 'en';
 }
 
@@ -76,6 +76,8 @@ export const HandPoseGuide: React.FC<HandPoseGuideProps> = ({
 
       case 'Đau':
       case 'Cần':
+      case 'Thắt nghẹn':
+      case 'Nghẽn họng':
         // FIST (✊)
         return (
           <svg viewBox="0 0 100 100" className="pose-svg" aria-label="Hình mẫu: Nắm đấm bàn tay">
@@ -91,6 +93,8 @@ export const HandPoseGuide: React.FC<HandPoseGuideProps> = ({
 
       case 'Bụng':
       case 'Giúp':
+      case 'Ngực':
+      case 'Dị ứng':
         // OPEN PALM (🖐️)
         return (
           <svg viewBox="0 0 100 100" className="pose-svg" aria-label="Hình mẫu: Xòe 5 ngón tay">
@@ -106,6 +110,8 @@ export const HandPoseGuide: React.FC<HandPoseGuideProps> = ({
 
       case 'Hôm qua':
       case 'Khai báo':
+      case 'Lan tay':
+      case 'Choáng váng':
       default:
         // THUMB SIDE (👈 Ngón cái xòe nghiêng)
         return (

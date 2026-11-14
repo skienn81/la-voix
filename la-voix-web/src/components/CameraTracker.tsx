@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Video, VideoOff, RefreshCw, CheckCircle2, Sliders, Sparkles, ToggleLeft, ToggleRight, ThumbsUp, Play, Settings } from 'lucide-react';
+import { Video, VideoOff, RefreshCw, CheckCircle2, Sliders, Sparkles, ToggleLeft, ToggleRight, ThumbsUp, Play, Settings, RotateCcw } from 'lucide-react';
 import { GestureStep, Language } from '../types';
 import { HandLandmarkStabilizer } from '../utils/oneEuroFilter';
 import { classifyHandLandmarks, GestureMatchResult, getTargetPoseName } from '../utils/gestureClassifier';
 import { HandPoseGuide } from './HandPoseGuide';
 
-export type SessionState = 'idle' | 'recording' | 'ready_to_finalize';
+export type SessionState = 'idle' | 'recording' | 'ready_to_finalize' | 'finalized';
 
 interface CameraTrackerProps {
   currentStep: GestureStep;
@@ -13,6 +13,7 @@ interface CameraTrackerProps {
   sessionState?: SessionState;
   onSessionStart?: () => void;
   onFinalizeLike?: () => void;
+  onResetSession?: () => void;
   language: Language;
   onMotionStateChange?: (isActive: boolean, energy: number) => void;
   onAutoAdvance?: () => void;
@@ -93,6 +94,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   sessionState = 'recording',
   onSessionStart,
   onFinalizeLike,
+  onResetSession,
   language,
   onMotionStateChange,
   onAutoAdvance,
@@ -111,7 +113,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
 
   const [isSimulated, setIsSimulated] = useState<boolean>(false);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(true);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false); // Popover settings state
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [cameraLoading, setCameraLoading] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [hasHandInView, setHasHandInView] = useState<boolean>(false);
@@ -126,6 +128,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   const lockCooldownUntilRef = useRef<number>(0);
   const lastProgressUpdateRef = useRef<number>(0);
   const lastReactUpdateRef = useRef<number>(performance.now());
+  const hasTriggeredFinalizeRef = useRef<boolean>(false); // STRICT GUARD: Ensures speech is triggered ONLY ONCE!
 
   const onAutoAdvanceRef = useRef(onAutoAdvance);
   onAutoAdvanceRef.current = onAutoAdvance;
@@ -137,8 +140,16 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   onSessionStartRef.current = onSessionStart;
   const onFinalizeLikeRef = useRef(onFinalizeLike);
   onFinalizeLikeRef.current = onFinalizeLike;
+  const onResetSessionRef = useRef(onResetSession);
+  onResetSessionRef.current = onResetSession;
 
-  // Stop camera stream safely
+  // Reset finalize trigger lock only when starting a new session or recording
+  useEffect(() => {
+    if (sessionState === 'idle' || sessionState === 'recording') {
+      hasTriggeredFinalizeRef.current = false;
+    }
+  }, [sessionState]);
+
   const stopCameraStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -149,7 +160,6 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     }
   }, []);
 
-  // Initialize MediaPipe & Webcam
   const startCamera = useCallback(async () => {
     setCameraLoading(true);
     setCameraError(null);
@@ -407,7 +417,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
       const ch = canvas.height;
       const timeInSec = now * 0.001;
 
-      // Cover-Fit Affine Mapping: computes exact rendered video boundaries inside viewport
+      // Cover-Fit Affine Mapping
       let renderW = cw;
       let renderH = ch;
       let offsetX = 0;
@@ -433,31 +443,36 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
       let rawLandmarks: { x: number; y: number }[] = [];
       let handDetected = false;
 
-      if (!isSimulated) {
-        if (video && landmarkerRef.current && video.readyState >= 2) {
-          try {
-            const safeTimestamp = Math.max(now, lastMediaPipeTimestampRef.current + 1);
-            lastMediaPipeTimestampRef.current = safeTimestamp;
+      // When session is finalized, freeze gesture tracking to avoid spam
+      const isTrackingActive = sessionState !== 'finalized';
 
-            const results = landmarkerRef.current.detectForVideo(video, safeTimestamp);
-            if (results.landmarks && results.landmarks.length > 0) {
-              const raw = results.landmarks[0];
-              const wristY = raw[0].y;
-              if (wristY < 0.90) {
-                rawLandmarks = raw.map((lm: any) => ({
-                  x: offsetX + lm.x * renderW,
-                  y: offsetY + lm.y * renderH,
-                }));
-                handDetected = true;
+      if (isTrackingActive) {
+        if (!isSimulated) {
+          if (video && landmarkerRef.current && video.readyState >= 2) {
+            try {
+              const safeTimestamp = Math.max(now, lastMediaPipeTimestampRef.current + 1);
+              lastMediaPipeTimestampRef.current = safeTimestamp;
+
+              const results = landmarkerRef.current.detectForVideo(video, safeTimestamp);
+              if (results.landmarks && results.landmarks.length > 0) {
+                const raw = results.landmarks[0];
+                const wristY = raw[0].y;
+                if (wristY < 0.90) {
+                  rawLandmarks = raw.map((lm: any) => ({
+                    x: offsetX + lm.x * renderW,
+                    y: offsetY + lm.y * renderH,
+                  }));
+                  handDetected = true;
+                }
               }
+            } catch (e) {
+              // safe catch
             }
-          } catch (e) {
-            // safe catch
           }
+        } else {
+          rawLandmarks = getProceduralLandmarks(timeInSec, cw, ch, currentStep.gloss);
+          handDetected = true;
         }
-      } else {
-        rawLandmarks = getProceduralLandmarks(timeInSec, cw, ch, currentStep.gloss);
-        handDetected = true;
       }
 
       let currentLandmarks: { x: number; y: number }[] = [];
@@ -472,7 +487,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         isTargetMatched = classification.isMatched;
       }
 
-      // Auto-Advance Lock Engine
+      // Auto-Advance Lock Engine (WITH ONCE-ONLY FINAL GUARD)
       if (handDetected && isTargetMatched && now > lockCooldownUntilRef.current) {
         if (!matchStartTimeRef.current) {
           matchStartTimeRef.current = now;
@@ -491,11 +506,24 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
             setIsFlashing(true);
             setTimeout(() => setIsFlashing(false), 400);
             if (onSessionStartRef.current) onSessionStartRef.current();
+            matchStartTimeRef.current = null;
+            setLockProgress(0);
+            lockCooldownUntilRef.current = now + 900;
           } else if (sessionState === 'ready_to_finalize') {
-            playAdvanceChirp('final');
-            setIsFlashing(true);
-            setTimeout(() => setIsFlashing(false), 600);
-            if (onFinalizeLikeRef.current) onFinalizeLikeRef.current();
+            // STRICT ONCE-ONLY GUARD FOR THUMBS UP!
+            if (!hasTriggeredFinalizeRef.current) {
+              hasTriggeredFinalizeRef.current = true;
+              playAdvanceChirp('final');
+              setIsFlashing(true);
+              setTimeout(() => setIsFlashing(false), 700);
+
+              if (onFinalizeLikeRef.current) {
+                onFinalizeLikeRef.current();
+              }
+            }
+            matchStartTimeRef.current = null;
+            setLockProgress(0);
+            lockCooldownUntilRef.current = now + 999999; // Lock permanently until user resets!
           } else {
             playAdvanceChirp('word');
             setIsFlashing(true);
@@ -506,11 +534,10 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
             if (autoAdvanceEnabledRef.current && onAutoAdvanceRef.current) {
               onAutoAdvanceRef.current();
             }
+            matchStartTimeRef.current = null;
+            setLockProgress(0);
+            lockCooldownUntilRef.current = now + 900;
           }
-
-          matchStartTimeRef.current = null;
-          setLockProgress(0);
-          lockCooldownUntilRef.current = now + 900;
         }
       } else {
         if (matchStartTimeRef.current !== null) {
@@ -563,8 +590,13 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
       playAdvanceChirp('start');
       if (onSessionStartRef.current) onSessionStartRef.current();
     } else if (sessionState === 'ready_to_finalize') {
-      playAdvanceChirp('final');
-      if (onFinalizeLikeRef.current) onFinalizeLikeRef.current();
+      if (!hasTriggeredFinalizeRef.current) {
+        hasTriggeredFinalizeRef.current = true;
+        playAdvanceChirp('final');
+        if (onFinalizeLikeRef.current) onFinalizeLikeRef.current();
+      }
+    } else if (sessionState === 'finalized') {
+      if (onResetSessionRef.current) onResetSessionRef.current();
     } else {
       playAdvanceChirp('word');
       setIsFlashing(true);
@@ -582,11 +614,21 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         <div className="sensor-title-box">
           <span
             className="sensor-indicator-light"
-            style={{ background: hasHandInView ? 'var(--signal-green)' : '#9ca3af' }}
+            style={{
+              background: sessionState === 'finalized'
+                ? '#10b981'
+                : hasHandInView
+                ? 'var(--signal-green)'
+                : '#9ca3af',
+            }}
             aria-hidden="true"
           />
           <span className="sensor-label">
-            {hasHandInView ? 'ĐÃ BẮT BÀN TAY' : 'CHỜ BÀN TAY KÝ HIỆU'}
+            {sessionState === 'finalized'
+              ? 'PHIÊN HOÀN TẤT (1 LẦN)'
+              : hasHandInView
+              ? 'ĐÃ BẮT BÀN TAY'
+              : 'CHỜ BÀN TAY KÝ HIỆU'}
           </span>
         </div>
 
@@ -693,14 +735,16 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
           <div className="reticle-top">
             <div className="reticle-badge" style={{ background: 'rgba(0,0,0,0.68)', border: 'none' }}>
               <span style={{ color: hasHandInView ? '#10b981' : '#9ca3af' }}>●</span>{' '}
-              {sessionState === 'idle'
-                ? 'CHỜ KHỞI ĐỘNG CÂU'
+              {sessionState === 'finalized'
+                ? 'ĐÃ PHÁT ÂM THANH CHO BÁC SĨ'
                 : sessionState === 'ready_to_finalize'
                 ? 'SẴN SÀNG CHỐT CÂU'
+                : sessionState === 'idle'
+                ? 'CHỜ KHỞI ĐỘNG CÂU'
                 : `TỪ ${currentStepIndex + 1}/4`}
             </div>
 
-            {hasHandInView && (
+            {hasHandInView && sessionState !== 'finalized' && (
               <div
                 className="reticle-badge"
                 style={{
@@ -738,7 +782,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
               {sessionState === 'ready_to_finalize' ? (
                 <>
                   <ThumbsUp size={22} className="text-white" />
-                  <span>👍 ĐÃ THẢ LIKE! PHÁT ÂM THANH RA LOA</span>
+                  <span>👍 ĐÃ THẢ LIKE! PHÁT TIẾNG RA LOA</span>
                 </>
               ) : sessionState === 'idle' ? (
                 <>
@@ -755,43 +799,50 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
           )}
 
           {/* VISUAL SIGN POSE TUTOR */}
-          <div style={{ position: 'absolute', top: '48px', right: '12px', zIndex: 12 }}>
-            <HandPoseGuide
-              gloss={sessionState === 'idle' ? 'Bắt đầu' : sessionState === 'ready_to_finalize' ? 'Thả like' : currentStep.gloss}
-              hasHandInView={hasHandInView}
-              matchScore={matchScore}
-              isMatched={liveClassification?.isMatched ?? false}
-              detectedPoseName={liveClassification?.detectedPoseName}
-              lockProgress={lockProgress}
-              sessionState={sessionState}
-              language={language}
-            />
-          </div>
+          {sessionState !== 'finalized' && (
+            <div style={{ position: 'absolute', top: '48px', right: '12px', zIndex: 12 }}>
+              <HandPoseGuide
+                gloss={sessionState === 'idle' ? 'Bắt đầu' : sessionState === 'ready_to_finalize' ? 'Thả like' : currentStep.gloss}
+                hasHandInView={hasHandInView}
+                matchScore={matchScore}
+                isMatched={liveClassification?.isMatched ?? false}
+                detectedPoseName={liveClassification?.detectedPoseName}
+                lockProgress={lockProgress}
+                sessionState={sessionState}
+                language={language}
+              />
+            </div>
+          )}
 
           {/* Bottom Card: Current Target Word & Advance Trigger */}
           <div className="reticle-bottom">
             <div className="kinetic-gloss-display" style={{ background: 'rgba(0,0,0,0.84)', border: 'none' }}>
               <span className="gloss-sub" style={{ color: '#cbd5e1' }}>
-                {sessionState === 'idle'
-                  ? 'GIAI ĐOẠN 0: KHỞI ĐỘNG PHIÊN'
+                {sessionState === 'finalized'
+                  ? 'KẾT QUẢ GIAO TIẾP'
                   : sessionState === 'ready_to_finalize'
                   ? 'GIAI ĐOẠN 5: CHỐT CÂU & PHÁT TIẾNG'
+                  : sessionState === 'idle'
+                  ? 'GIAI ĐOẠN 0: KHỞI ĐỘNG PHIÊN'
                   : `KÝ HIỆU TIẾP THEO (TỪ ${currentStepIndex + 1}/4)`}
               </span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                <span className="gloss-main" style={{ fontSize: '22px' }}>
-                  {sessionState === 'idle'
-                    ? '👋 Vẫy tay mở chào'
+                <span className="gloss-main" style={{ fontSize: '20px' }}>
+                  {sessionState === 'finalized'
+                    ? '🎉 Câu đã phát thành công!'
                     : sessionState === 'ready_to_finalize'
                     ? '👍 Thả like kết thúc câu'
+                    : sessionState === 'idle'
+                    ? '👋 Vẫy tay mở chào'
                     : currentStep.gloss}
                 </span>
-                <span style={{ fontSize: '12px', color: '#38bdf8', fontWeight: 600 }}>
-                  ({getTargetPoseName(currentStep.gloss, sessionState)})
-                </span>
+                {sessionState !== 'finalized' && (
+                  <span style={{ fontSize: '12px', color: '#38bdf8', fontWeight: 600 }}>
+                    ({getTargetPoseName(currentStep.gloss, sessionState)})
+                  </span>
+                )}
               </div>
 
-              {/* Lock Progress Countdown Bar */}
               {lockProgress > 0 && (
                 <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', marginTop: '5px', overflow: 'hidden' }}>
                   <div
@@ -811,16 +862,25 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
               className="btn-hardware"
               style={{ minHeight: '34px', background: 'rgba(0,0,0,0.8)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.2)' }}
               onClick={handleForceAdvance}
-              title="Khớp nhanh bước này (phím Space)"
+              title={sessionState === 'finalized' ? 'Bắt đầu câu mới (Phím R)' : 'Khớp nhanh bước này (phím Space)'}
             >
-              <Sparkles size={13} aria-hidden="true" />
-              <span>
-                {sessionState === 'idle'
-                  ? 'Bắt đầu ngay [Space]'
-                  : sessionState === 'ready_to_finalize'
-                  ? 'Chốt & Phát tiếng [Space]'
-                  : 'Khớp nhanh [Space]'}
-              </span>
+              {sessionState === 'finalized' ? (
+                <>
+                  <RotateCcw size={13} aria-hidden="true" />
+                  <span>Câu mới [Phím R]</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={13} aria-hidden="true" />
+                  <span>
+                    {sessionState === 'idle'
+                      ? 'Bắt đầu ngay [Space]'
+                      : sessionState === 'ready_to_finalize'
+                      ? 'Chốt & Phát tiếng [Space]'
+                      : 'Khớp nhanh [Space]'}
+                  </span>
+                </>
+              )}
             </button>
           </div>
         </div>

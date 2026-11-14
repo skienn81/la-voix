@@ -39,10 +39,12 @@ export interface GestureMatchResult {
   debugText: string;
 }
 
+export type ClassifierSessionState = 'idle' | 'recording' | 'ready_to_finalize' | 'finalized';
+
 export function classifyHandLandmarks(
   landmarks: { x: number; y: number }[],
   targetGloss: string,
-  sessionState: 'idle' | 'recording' | 'ready_to_finalize' = 'recording'
+  sessionState: ClassifierSessionState = 'recording'
 ): GestureMatchResult {
   if (!landmarks || landmarks.length < 21) {
     return {
@@ -161,6 +163,9 @@ export function classifyHandLandmarks(
   } else if (sessionState === 'ready_to_finalize') {
     targetPose = 'THUMBS_UP';
     targetPoseName = '👍 Thả like kết thúc câu';
+  } else if (sessionState === 'finalized') {
+    targetPose = 'UNKNOWN';
+    targetPoseName = '✓ Hoàn thành phiên';
   } else {
     targetPose = getTargetCanonicalPose(targetGloss);
     targetPoseName = getTargetPoseName(targetGloss, sessionState);
@@ -169,6 +174,19 @@ export function classifyHandLandmarks(
   let matchScore = 0;
   let isMatched = false;
   let debugText = '';
+
+  if (sessionState === 'finalized') {
+    // Session is already completed and broadcasted. No further auto-locks.
+    return {
+      matchScore: 0,
+      isMatched: false,
+      detectedPose,
+      detectedPoseName,
+      targetPoseName,
+      fingerStates,
+      debugText: '✓ Phiên đã hoàn tất. Nhấn phím R hoặc Space để bắt đầu câu mới.',
+    };
+  }
 
   // EXACT MATCH EVALUATION
   if (targetPose === 'START_WAVE') {
@@ -206,13 +224,22 @@ export function classifyHandLandmarks(
 
 export function getTargetCanonicalPose(gloss: string): CanonicalPose {
   const g = (gloss || '').trim();
+  // Ca 1 (Đau bụng): Tôi -> Đau -> Bụng -> Hôm qua
+  // Ca 2 (Tim mạch): Tôi -> Ngực -> Thắt nghẹn -> Lan tay
+  // Ca 3 (Dị ứng): Tôi -> Dị ứng -> Nghẽn họng -> Choáng váng
+  // Ca 4 (Hành chính): Tôi -> Cần -> Giúp -> Khai báo
+
   if (g === 'Tôi') return 'POINTING';
-  if (g === 'Đau') return 'FIST';
-  if (g === 'Bụng') return 'OPEN_PALM';
-  if (g === 'Hôm qua') return 'THUMB_SIDE';
-  if (g === 'Cần') return 'FIST';
-  if (g === 'Giúp') return 'OPEN_PALM';
-  if (g === 'Khai báo') return 'THUMB_SIDE';
+
+  // Fist: Đau, Thắt nghẹn, Nghẽn họng, Cần
+  if (['Đau', 'Thắt nghẹn', 'Nghẽn họng', 'Cần'].includes(g)) return 'FIST';
+
+  // Open Palm: Bụng, Ngực, Dị ứng, Giúp
+  if (['Bụng', 'Ngực', 'Dị ứng', 'Giúp'].includes(g)) return 'OPEN_PALM';
+
+  // Thumb Side: Hôm qua, Lan tay, Choáng váng, Khai báo
+  if (['Hôm qua', 'Lan tay', 'Choáng váng', 'Khai báo'].includes(g)) return 'THUMB_SIDE';
+
   return 'POINTING';
 }
 
@@ -222,6 +249,9 @@ export function getTargetPoseName(gloss: string, sessionState: string = 'recordi
   }
   if (sessionState === 'ready_to_finalize') {
     return '👍 Thả like kết thúc câu';
+  }
+  if (sessionState === 'finalized') {
+    return '✓ Đã phát âm (Phím R / Space cho câu mới)';
   }
 
   const pose = getTargetCanonicalPose(gloss);

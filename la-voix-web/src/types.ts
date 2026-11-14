@@ -1,11 +1,13 @@
 export type Language = 'vi' | 'en';
 
+export type ScenarioId = 'medical' | 'cardio' | 'allergy' | 'admin';
+
 export interface GestureStep {
   id: string;
   gloss: string;
   glossEn: string;
   confidence: number;
-  nmmMarker: string; // Non-manual marker (biểu cảm khuôn mặt / tư thế)
+  nmmMarker: string; // Non-manual marker
   nmmMarkerEn: string;
   handPoseDesc: string;
   handPoseDescEn: string;
@@ -29,7 +31,7 @@ export interface ReverseSignCard {
 }
 
 export interface Scenario {
-  id: 'medical' | 'admin';
+  id: ScenarioId;
   titleVi: string;
   titleEn: string;
   badgeVi: string;
