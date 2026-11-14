@@ -9,6 +9,8 @@ import {
   Video,
   Play,
   Square,
+  Menu,
+  X,
   Languages as LanguagesIcon,
   Activity,
   Zap,
@@ -46,22 +48,30 @@ const getTouchCardIcon = (iconName: string) => {
 
 const AUTO_SCENARIOS: ScenarioId[] = ['medical', 'cardio', 'allergy', 'admin'];
 
+let sharedDemoAudioCtx: AudioContext | null = null;
+
 const playDemoTone = (freq = 880, durationMs = 80) => {
   if (typeof window === 'undefined') return;
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    if (!sharedDemoAudioCtx || sharedDemoAudioCtx.state === 'closed') {
+      sharedDemoAudioCtx = new AudioCtx();
+    }
+    if (sharedDemoAudioCtx.state === 'suspended') {
+      sharedDemoAudioCtx.resume().catch(() => {});
+    }
+    const osc = sharedDemoAudioCtx.createOscillator();
+    const gain = sharedDemoAudioCtx.createGain();
+    const now = sharedDemoAudioCtx.currentTime;
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    gain.gain.setValueAtTime(0.08, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationMs / 1000);
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + durationMs / 1000);
     osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + durationMs / 1000);
+    gain.connect(sharedDemoAudioCtx.destination);
+    osc.start(now);
+    osc.stop(now + durationMs / 1000);
   } catch (e) {
     // AudioContext blocked
   }
@@ -107,11 +117,15 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      clearAllAutoTimeouts();
       if (resetTimeoutRef.current) {
         clearTimeout(resetTimeoutRef.current);
       }
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
     };
-  }, []);
+  }, [clearAllAutoTimeouts]);
 
   const activeScenario = scenarios[scenarioId];
   const activeReverseCards = scenarioReverseCards[scenarioId];
@@ -200,6 +214,8 @@ export const App: React.FC = () => {
   const runAutoCase = useCallback((caseIndex: number) => {
     if (!isAutoPlayingRef.current) return;
 
+    clearAllAutoTimeouts();
+
     if (caseIndex >= AUTO_SCENARIOS.length) {
       // Completed all 4 cases! Stop completely!
       isAutoPlayingRef.current = false;
@@ -210,7 +226,11 @@ export const App: React.FC = () => {
           ? '✓ Hoàn thành tự động toàn bộ 4 ca Demo!'
           : '✓ Completed auto-demo of all 4 cases!'
       );
-      setTimeout(() => setResetFeedback(null), 3000);
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = window.setTimeout(() => {
+        setResetFeedback(null);
+        resetTimeoutRef.current = null;
+      }, 3000);
       return;
     }
 
@@ -309,7 +329,11 @@ export const App: React.FC = () => {
     if (isAutoPlayingRef.current) {
       stopAutoPlay();
       setResetFeedback(language === 'vi' ? 'Đã tạm dừng tự động Demo.' : 'Demo paused.');
-      setTimeout(() => setResetFeedback(null), 2000);
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = window.setTimeout(() => {
+        setResetFeedback(null);
+        resetTimeoutRef.current = null;
+      }, 2000);
     } else {
       clearAllAutoTimeouts();
       isAutoPlayingRef.current = true;
@@ -319,7 +343,11 @@ export const App: React.FC = () => {
           ? '▶️ Bắt đầu tự động chạy 4 ca Demo (Tự chuyển sau 2s)...'
           : '▶️ Starting auto-demo for 4 cases...'
       );
-      setTimeout(() => setResetFeedback(null), 2500);
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = window.setTimeout(() => {
+        setResetFeedback(null);
+        resetTimeoutRef.current = null;
+      }, 2500);
       runAutoCase(0);
     }
   }, [clearAllAutoTimeouts, language, runAutoCase, stopAutoPlay]);

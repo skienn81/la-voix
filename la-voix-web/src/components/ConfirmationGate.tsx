@@ -203,7 +203,7 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [language, finalFullSentence, availableVoices, onConfirmSpeech]);
+  }, [language, finalFullSentence, availableVoices, onConfirmSpeech, onSpeechEnd]);
 
   // Global keydown shortcut [C] for broadcast
   useEffect(() => {
