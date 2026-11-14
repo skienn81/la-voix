@@ -93,7 +93,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   const lastMediaPipeTimestampRef = useRef<number>(0);
 
   const [isSimulated, setIsSimulated] = useState<boolean>(false);
-  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(true); // Controlled Auto-Advance toggle
+  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(false); // Default OFF per Swarm Lead Directive #28 for 90s video recording!
   const [cameraLoading, setCameraLoading] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [hasHandInView, setHasHandInView] = useState<boolean>(false);
@@ -460,7 +460,9 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
           setIsFlashing(true);
           setLastMatchedGloss(currentStep.gloss);
           setTimeout(() => {
-            setIsFlashing(false);
+            if (isMountedRef.current) {
+              setIsFlashing(false);
+            }
           }, 450);
 
           if (onTokenMatchedRef.current) {
@@ -530,7 +532,9 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     setIsFlashing(true);
     setLastMatchedGloss(currentStep.gloss);
     setTimeout(() => {
-      setIsFlashing(false);
+      if (isMountedRef.current) {
+        setIsFlashing(false);
+      }
     }, 450);
     if (onTokenMatchedRef.current) {
       onTokenMatchedRef.current(currentStep);
@@ -561,16 +565,12 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
           {/* Toggle Auto-Advance for video recording */}
           <button
             type="button"
-            className={`btn-hardware ${autoAdvanceEnabled ? 'active-toggle' : ''}`}
-            style={{ minHeight: '32px', fontSize: '10px' }}
+            className={`auto-advance-toggle ${autoAdvanceEnabled ? 'on' : ''}`}
             onClick={() => setAutoAdvanceEnabled((prev) => !prev)}
             title="Bật/Tắt tự động nhảy từ khi làm đúng (0.8s)"
+            aria-pressed={autoAdvanceEnabled}
           >
-            {autoAdvanceEnabled ? (
-              <ToggleRight size={14} className="text-emerald-500" aria-hidden="true" />
-            ) : (
-              <ToggleLeft size={14} className="text-slate-400" aria-hidden="true" />
-            )}
+            <span className="toggle-led" aria-hidden="true" />
             <span>{autoAdvanceEnabled ? 'Tự nhảy: BẬT' : 'Tự nhảy: TẮT'}</span>
           </button>
 
@@ -613,7 +613,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
       )}
 
       {/* Optical Viewfinder Frame */}
-      <div className={`viewfinder-frame ${isFlashing ? 'match-flash is-flashing' : ''}`}>
+      <div className={`viewfinder-frame ${isFlashing ? 'match-flash is-flashing' : ''} ${liveClassification?.isMatched ? 'match-sustained' : ''}`}>
         <video
           ref={videoRef}
           className="viewfinder-video"
@@ -641,10 +641,28 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
                   background: liveClassification?.isMatched ? 'rgba(5, 150, 105, 0.92)' : 'rgba(0,0,0,0.65)',
                   color: '#ffffff',
                   border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
               >
                 <span>{liveClassification?.detectedPoseName || 'Đang quét...'}</span>
-                {lockProgress > 0 && <span> ({Math.round(lockProgress * 100)}%)</span>}
+                {lockProgress > 0 && (
+                  <div className="countdown-ring-container" aria-label={`Tiến độ giữ: ${Math.round(lockProgress * 100)}%`}>
+                    <svg className="countdown-ring-svg" viewBox="0 0 32 32">
+                      <circle className="countdown-ring-bg" cx="16" cy="16" r="13" />
+                      <circle
+                        className="countdown-ring-fill"
+                        cx="16"
+                        cy="16"
+                        r="13"
+                        strokeDasharray={81.68}
+                        strokeDashoffset={81.68 * (1 - lockProgress)}
+                      />
+                    </svg>
+                    <span className="countdown-ring-text">{Math.round(lockProgress * 100)}%</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -721,13 +739,12 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
 
             <button
               type="button"
-              className="btn-hardware"
-              style={{ minHeight: '34px', background: 'rgba(0,0,0,0.78)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.2)' }}
+              className="btn-advance-word"
               onClick={handleForceAdvance}
               title="Khớp nhanh từ này (phím Space)"
             >
               <Sparkles size={13} aria-hidden="true" />
-              <span>Khớp nhanh [Space]</span>
+              <span>Tiếp tục [Space]</span>
             </button>
           </div>
         </div>
