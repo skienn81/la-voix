@@ -338,6 +338,7 @@ export const App: React.FC = () => {
           {/* SENSOR CAMERA / VIEWFINDER */}
           <CameraTracker
             currentStep={currentStep}
+            currentStepIndex={currentStepIndex}
             language={language}
             onAutoAdvance={handleAutoAdvance}
             onTokenMatched={handleTokenMatched}

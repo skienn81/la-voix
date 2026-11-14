@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Video, VideoOff, RefreshCw, CheckCircle2, Sliders, Sparkles } from 'lucide-react';
+import { Video, VideoOff, RefreshCw, CheckCircle2, Sliders, Sparkles, ToggleLeft, ToggleRight, ThumbsUp } from 'lucide-react';
 import { GestureStep, Language } from '../types';
 import { HandLandmarkStabilizer } from '../utils/oneEuroFilter';
-import { classifyHandLandmarks, GestureMatchResult } from '../utils/gestureClassifier';
+import { classifyHandLandmarks, GestureMatchResult, getTargetPoseName } from '../utils/gestureClassifier';
 import { HandPoseGuide } from './HandPoseGuide';
 
 interface CameraTrackerProps {
   currentStep: GestureStep;
+  currentStepIndex?: number;
   language: Language;
   onMotionStateChange?: (isActive: boolean, energy: number) => void;
   onAutoAdvance?: () => void;
@@ -28,12 +29,12 @@ const HAND_CONNECTIONS: [number, number][] = [
   [0, 17],
 ];
 
-const TARGET_MATCH_THRESHOLD = 65; // User-friendly sensitivity
-const LOCK_HOLD_MS = 320; // 0.32s hold to confirm naturally
+// Natural Intentional Hold duration: 800ms (prevents accidental twitch / spamming!)
+const LOCK_HOLD_MS = 800;
 
-// AudioContext for pleasant confirmation chime
+// AudioContext for affirmative token match chime
 let sharedAudioCtx: AudioContext | null = null;
-const playAdvanceChirp = () => {
+const playAdvanceChirp = (isFinal: boolean = false) => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
@@ -49,17 +50,25 @@ const playAdvanceChirp = () => {
 
     osc.type = 'sine';
     const now = sharedAudioCtx.currentTime;
-    osc.frequency.setValueAtTime(880, now);
-    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
-
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
+    if (isFinal) {
+      // High triumph arpeggio for final thumbs up
+      osc.frequency.setValueAtTime(587.33, now); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08); // A5
+      osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.16); // D6
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.start(now);
+      osc.stop(now + 0.22);
+    } else {
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      osc.start(now);
+      osc.stop(now + 0.09);
+    }
     osc.connect(gain);
     gain.connect(sharedAudioCtx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.08);
   } catch (e) {
     // AudioContext blocked
   }
@@ -79,11 +88,12 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   const landmarkerRef = useRef<any>(null);
   const isMountedRef = useRef<boolean>(true);
 
-  // MediSign AI 1€ Filter & Zero-Lag Fast Motion Stabilizer
+  // MediSign AI 1€ Filter Stabilizer
   const stabilizerRef = useRef<HandLandmarkStabilizer>(new HandLandmarkStabilizer());
   const lastMediaPipeTimestampRef = useRef<number>(0);
 
   const [isSimulated, setIsSimulated] = useState<boolean>(false);
+  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(true); // Controlled Auto-Advance toggle
   const [cameraLoading, setCameraLoading] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [hasHandInView, setHasHandInView] = useState<boolean>(false);
@@ -103,6 +113,8 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   onAutoAdvanceRef.current = onAutoAdvance;
   const onTokenMatchedRef = useRef(onTokenMatched);
   onTokenMatchedRef.current = onTokenMatched;
+  const autoAdvanceEnabledRef = useRef(autoAdvanceEnabled);
+  autoAdvanceEnabledRef.current = autoAdvanceEnabled;
 
   // Stop camera stream safely
   const stopCameraStream = useCallback(() => {
@@ -152,7 +164,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
-          numHands: 2,
+          numHands: 1, // Focus strictly on ONE Hand for maximum stability
         });
         if (isMountedRef.current) {
           landmarkerRef.current = landmarker;
@@ -222,36 +234,21 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     let indexExtension = 1.0;
     let thumbAngle = 0.4;
     let fingerCurl = 0.2;
-    let vibration = 0;
 
     if (gloss === 'Tôi') {
       indexExtension = 1.35;
       fingerCurl = 0.85;
-      wristYOffset += Math.sin(t * 3) * 5;
     } else if (gloss === 'Đau') {
-      vibration = Math.sin(t * 12) * 3.5;
-      fingerCurl = 0.8;
-      wristXOffset += Math.sin(t * 6) * 10;
+      fingerCurl = 0.88;
     } else if (gloss === 'Bụng') {
       fingerCurl = 0.05;
-      wristYOffset += 30 + Math.sin(t * 2.5) * 10;
     } else if (gloss === 'Hôm qua') {
-      thumbAngle = 0.85;
-      fingerCurl = 0.65;
-      wristYOffset -= 25 + Math.cos(t * 2) * 8;
-      wristXOffset += 20 + Math.sin(t * 2) * 8;
-    } else if (gloss === 'Cần' || gloss === 'Giúp') {
-      fingerCurl = 0.15;
-      wristYOffset -= 15 + Math.sin(t * 2.2) * 12;
-    } else if (gloss === 'Khai báo') {
-      wristXOffset += Math.sin(t * 3.5) * 20;
-      indexExtension = 1.1;
-      thumbAngle = 0.25;
-      fingerCurl = 0.75;
+      thumbAngle = 0.95;
+      fingerCurl = 0.85;
     }
 
     landmarks[0] = {
-      x: cx + wristXOffset + vibration,
+      x: cx + wristXOffset,
       y: cy + wristYOffset,
     };
 
@@ -288,7 +285,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         }
 
         const effectiveSegLen = (fIdx === 1 && s === 3 ? segLen * indexExtension : segLen) * (1 - (fIdx > 1 ? fingerCurl * 0.2 : 0));
-        curX += Math.sin(angle) * effectiveSegLen + vibration * 0.4;
+        curX += Math.sin(angle) * effectiveSegLen;
         curY -= Math.cos(angle) * effectiveSegLen;
 
         landmarks[segIdx] = { x: curX, y: curY };
@@ -308,15 +305,15 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   ) => {
     ctx.clearRect(0, 0, width, height);
 
-    // CRITICAL: If no real hand, leave canvas 100% clean! Zero fake bones!
+    // CRITICAL: When no real hand, leave canvas 100% clean!
     if (!userLandmarks || userLandmarks.length < 21) {
       return;
     }
 
-    const boneColor = isTargetLocked ? '#10b981' : '#34d399';
+    const boneColor = isTargetLocked ? '#10b981' : '#38bdf8';
     const tipFill = isTargetLocked ? '#059669' : '#ff5500';
 
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5;
     ctx.strokeStyle = boneColor;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -339,24 +336,24 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
 
       ctx.beginPath();
       if (isTip) {
-        ctx.arc(pt.x, pt.y, 6.5, 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
         ctx.fillStyle = tipFill;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      } else if (isWrist) {
+        ctx.arc(pt.x, pt.y, 6.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffaa00';
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
-      } else if (isWrist) {
-        ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffaa00';
-        ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
       } else {
-        ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
         ctx.fillStyle = '#ffffff';
         ctx.fill();
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.5;
         ctx.strokeStyle = boneColor;
         ctx.stroke();
       }
@@ -406,11 +403,15 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
             const results = landmarkerRef.current.detectForVideo(videoRef.current, safeTimestamp);
             if (results.landmarks && results.landmarks.length > 0) {
               const raw = results.landmarks[0];
-              rawLandmarks = raw.map((lm: any) => ({
-                x: lm.x * width,
-                y: lm.y * height,
-              }));
-              handDetected = true;
+              // Active Zone Filter: ignore hand if wrist is below 88% screen height (resting on keyboard/mouse)
+              const wristY = raw[0].y;
+              if (wristY < 0.88) {
+                rawLandmarks = raw.map((lm: any) => ({
+                  x: lm.x * width,
+                  y: lm.y * height,
+                }));
+                handDetected = true;
+              }
             }
           } catch (e) {
             // MediaPipe detection loop safe catch
@@ -422,10 +423,10 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         handDetected = true;
       }
 
-      // Safe filtering and gesture classification
+      // Safe filtering and single-hand gesture classification
       let currentLandmarks: { x: number; y: number }[] = [];
-      let calibratedMatch = 0;
       let isTargetMatched = false;
+      let matchScoreVal = 0;
       let classification: GestureMatchResult | null = null;
 
       if (handDetected && rawLandmarks.length >= 21) {
@@ -434,63 +435,45 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
 
         // Classify anatomical gesture
         classification = classifyHandLandmarks(currentLandmarks, currentStep.gloss);
-        calibratedMatch = classification.matchScore;
+        matchScoreVal = classification.matchScore;
         isTargetMatched = classification.isMatched;
       }
 
-      // Live Telemetry for DevTools inspection
-      (window as any).__LAVOIX_TELEMETRY__ = {
-        gloss: currentStep.gloss,
-        handDetected,
-        matchScore: calibratedMatch,
-        isMatched: isTargetMatched,
-        detectedPose: classification?.detectedPose || 'NO_HAND',
-        fingerStates: classification?.fingerStates,
-        debugText: classification?.debugText || 'Chưa thấy bàn tay',
-        isSimulated,
-        timestamp: Date.now(),
-      };
+      // Auto-Advance Lock Engine (Controlled, Requires 800ms intentional hold!)
+      if (handDetected && isTargetMatched && now > lockCooldownUntilRef.current) {
+        if (!matchStartTimeRef.current) {
+          matchStartTimeRef.current = now;
+        }
+        const duration = now - matchStartTimeRef.current;
+        const progress = Math.min(1.0, duration / LOCK_HOLD_MS);
 
-      // Auto-Advance Lock Engine (ONLY triggers if a hand is ACTUALLY in view and matches!)
-      if (handDetected && now > lockCooldownUntilRef.current) {
-        if (isTargetMatched || calibratedMatch >= TARGET_MATCH_THRESHOLD) {
-          if (!matchStartTimeRef.current) {
-            matchStartTimeRef.current = now;
+        if (now - lastProgressUpdateRef.current >= 40 || progress >= 1.0) {
+          setLockProgress(progress);
+          lastProgressUpdateRef.current = now;
+        }
+
+        // Trigger advance when hold reaches LOCK_HOLD_MS
+        if (duration >= LOCK_HOLD_MS) {
+          const isFinalStep = currentStep.gloss === 'Hôm qua' || currentStep.gloss === 'Khai báo';
+          playAdvanceChirp(isFinalStep);
+
+          setIsFlashing(true);
+          setLastMatchedGloss(currentStep.gloss);
+          setTimeout(() => {
+            setIsFlashing(false);
+          }, 450);
+
+          if (onTokenMatchedRef.current) {
+            onTokenMatchedRef.current(currentStep);
           }
-          const duration = now - matchStartTimeRef.current;
-          const progress = Math.min(1.0, duration / LOCK_HOLD_MS);
 
-          if (now - lastProgressUpdateRef.current >= 40 || progress >= 1.0) {
-            setLockProgress(progress);
-            lastProgressUpdateRef.current = now;
+          if (autoAdvanceEnabledRef.current && onAutoAdvanceRef.current) {
+            onAutoAdvanceRef.current();
           }
 
-          if (duration >= LOCK_HOLD_MS) {
-            playAdvanceChirp();
-
-            setIsFlashing(true);
-            setLastMatchedGloss(currentStep.gloss);
-            setTimeout(() => {
-              setIsFlashing(false);
-            }, 350);
-
-            if (onTokenMatchedRef.current) {
-              onTokenMatchedRef.current(currentStep);
-            }
-
-            if (onAutoAdvanceRef.current) {
-              onAutoAdvanceRef.current();
-            }
-
-            matchStartTimeRef.current = null;
-            setLockProgress(0);
-            lockCooldownUntilRef.current = now + 450;
-          }
-        } else {
-          if (matchStartTimeRef.current !== null) {
-            matchStartTimeRef.current = null;
-            setLockProgress(0);
-          }
+          matchStartTimeRef.current = null;
+          setLockProgress(0);
+          lockCooldownUntilRef.current = now + 900; // Cooldown to prevent accidental double-skip
         }
       } else {
         if (matchStartTimeRef.current !== null) {
@@ -502,7 +485,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
       // Throttled UI state updates
       if (now - lastReactUpdateRef.current >= 100) {
         setHasHandInView(handDetected);
-        setMatchScore(calibratedMatch);
+        setMatchScore(matchScoreVal);
         setLiveClassification(classification);
         lastReactUpdateRef.current = now;
       }
@@ -542,12 +525,13 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
 
   // Manual Force Match / Advance with Space
   const handleForceAdvance = () => {
-    playAdvanceChirp();
+    const isFinalStep = currentStep.gloss === 'Hôm qua' || currentStep.gloss === 'Khai báo';
+    playAdvanceChirp(isFinalStep);
     setIsFlashing(true);
     setLastMatchedGloss(currentStep.gloss);
     setTimeout(() => {
       setIsFlashing(false);
-    }, 350);
+    }, 450);
     if (onTokenMatchedRef.current) {
       onTokenMatchedRef.current(currentStep);
     }
@@ -556,9 +540,11 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
     }
   };
 
+  const isFinalTarget = currentStep.gloss === 'Hôm qua' || currentStep.gloss === 'Khai báo';
+
   return (
     <div className="sensor-chassis">
-      {/* Sensor Control Header (Clean, Minimal) */}
+      {/* Sensor Control Header */}
       <div className="sensor-header">
         <div className="sensor-title-box">
           <span
@@ -567,11 +553,27 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
             aria-hidden="true"
           />
           <span className="sensor-label">
-            {hasHandInView ? 'ĐÃ BẮT ĐƯỢC BÀN TAY' : 'CHỜ BÀN TAY KÝ HIỆU'}
+            {hasHandInView ? 'ĐÃ BẮT BÀN TAY' : 'CHỜ BÀN TAY KÝ HIỆU'}
           </span>
         </div>
 
         <div className="sensor-switch-group">
+          {/* Toggle Auto-Advance for video recording */}
+          <button
+            type="button"
+            className={`btn-hardware ${autoAdvanceEnabled ? 'active-toggle' : ''}`}
+            style={{ minHeight: '32px', fontSize: '10px' }}
+            onClick={() => setAutoAdvanceEnabled((prev) => !prev)}
+            title="Bật/Tắt tự động nhảy từ khi làm đúng (0.8s)"
+          >
+            {autoAdvanceEnabled ? (
+              <ToggleRight size={14} className="text-emerald-500" aria-hidden="true" />
+            ) : (
+              <ToggleLeft size={14} className="text-slate-400" aria-hidden="true" />
+            )}
+            <span>{autoAdvanceEnabled ? 'Tự nhảy: BẬT' : 'Tự nhảy: TẮT'}</span>
+          </button>
+
           <button
             type="button"
             className="btn-hardware"
@@ -610,7 +612,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         </div>
       )}
 
-      {/* Optical Viewfinder Frame (Completely Clean View of User!) */}
+      {/* Optical Viewfinder Frame */}
       <div className={`viewfinder-frame ${isFlashing ? 'match-flash is-flashing' : ''}`}>
         <video
           ref={videoRef}
@@ -621,80 +623,90 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         />
         <canvas ref={canvasRef} className="viewfinder-canvas" />
 
-        {/* Viewfinder Flash Overlay Glow ("nháy 1 cái") */}
+        {/* Viewfinder Flash Overlay Glow */}
         {isFlashing && <div className="viewfinder-flash-overlay" aria-hidden="true" />}
 
-        {/* Viewfinder Reticle & HUD (Zero Clutter on Face!) */}
+        {/* Viewfinder Reticle & HUD */}
         <div className="viewfinder-reticle">
           <div className="reticle-top">
             <div className="reticle-badge" style={{ background: 'rgba(0,0,0,0.65)', border: 'none' }}>
               <span style={{ color: hasHandInView ? '#10b981' : '#9ca3af' }}>●</span>{' '}
-              {isSimulated ? 'Chế độ Mô phỏng' : 'Webcam Trực tiếp'}
+              {isSimulated ? 'Mô phỏng' : 'Webcam Live (1 Hand)'}
             </div>
 
             {hasHandInView && (
               <div
                 className="reticle-badge"
                 style={{
-                  background: matchScore >= TARGET_MATCH_THRESHOLD ? 'rgba(5, 150, 105, 0.88)' : 'rgba(0,0,0,0.65)',
+                  background: liveClassification?.isMatched ? 'rgba(5, 150, 105, 0.92)' : 'rgba(0,0,0,0.65)',
                   color: '#ffffff',
                   border: 'none',
                 }}
               >
-                <span>Khớp: {matchScore}%</span>
+                <span>{liveClassification?.detectedPoseName || 'Đang quét...'}</span>
                 {lockProgress > 0 && <span> ({Math.round(lockProgress * 100)}%)</span>}
               </div>
             )}
           </div>
 
-          {/* Flash Match Toast Banner ("nháy 1 cái") */}
+          {/* Flash Match Toast Banner */}
           {isFlashing && (
             <div
               style={{
                 alignSelf: 'center',
-                padding: '10px 24px',
+                padding: '12px 28px',
                 borderRadius: '8px',
-                background: 'rgba(5, 150, 105, 0.95)',
+                background: 'rgba(5, 150, 105, 0.96)',
                 color: '#ffffff',
-                fontSize: '15px',
+                fontSize: '16px',
                 fontWeight: 800,
                 letterSpacing: '0.03em',
-                boxShadow: '0 4px 24px rgba(16, 185, 129, 0.7)',
+                boxShadow: '0 4px 28px rgba(16, 185, 129, 0.75)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '10px',
                 backdropFilter: 'blur(6px)',
-                border: '1px solid #34d399',
+                border: '1.5px solid #34d399',
               }}
             >
-              <CheckCircle2 size={20} className="text-white" />
-              <span>ĐÃ KHỚP: [{lastMatchedGloss || currentStep.gloss}]</span>
+              {isFinalTarget ? <ThumbsUp size={22} className="text-white" /> : <CheckCircle2 size={22} className="text-white" />}
+              <span>
+                {isFinalTarget
+                  ? `👍 ĐÃ THẢ LIKE! HOÀN THÀNH CÂU`
+                  : `✓ ĐÃ KHỚP: [${lastMatchedGloss || currentStep.gloss}]`}
+              </span>
             </div>
           )}
 
-          {/* VISUAL SIGN POSE TUTOR (Hình mẫu cử chỉ tay - Kiểu Typing Tutor) */}
+          {/* VISUAL SIGN POSE TUTOR (Typing tutor for hands) */}
           <div style={{ position: 'absolute', top: '48px', right: '12px', zIndex: 12 }}>
             <HandPoseGuide
               gloss={currentStep.gloss}
               hasHandInView={hasHandInView}
               matchScore={matchScore}
               isMatched={liveClassification?.isMatched ?? false}
+              detectedPoseName={liveClassification?.detectedPoseName}
+              lockProgress={lockProgress}
               language={language}
             />
           </div>
 
-          {/* Bottom Card: Minimal Target Word & Advance Trigger */}
+          {/* Bottom Card: Current Target Word & Advance Trigger */}
           <div className="reticle-bottom">
-            <div className="kinetic-gloss-display" style={{ background: 'rgba(0,0,0,0.78)', border: 'none' }}>
-              <span className="gloss-sub" style={{ color: '#cbd5e1' }}>KÝ HIỆU TIẾP THEO</span>
+            <div className="kinetic-gloss-display" style={{ background: 'rgba(0,0,0,0.82)', border: 'none' }}>
+              <span className="gloss-sub" style={{ color: '#cbd5e1' }}>
+                {isFinalTarget ? 'KÝ HIỆU KẾT THÚC CÂU' : 'KÝ HIỆU TIẾP THEO'}
+              </span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                 <span className="gloss-main" style={{ fontSize: '22px' }}>{currentStep.gloss}</span>
-                <span style={{ fontSize: '11px', color: '#94a3b8' }}>({currentStep.handPoseDesc})</span>
+                <span style={{ fontSize: '12px', color: '#38bdf8', fontWeight: 600 }}>
+                  ({getTargetPoseName(currentStep.gloss)})
+                </span>
               </div>
 
               {/* Lock Progress Countdown Bar */}
               {lockProgress > 0 && (
-                <div style={{ width: '100%', height: '3px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', marginTop: '4px', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', marginTop: '5px', overflow: 'hidden' }}>
                   <div
                     style={{
                       width: `${lockProgress * 100}%`,
@@ -710,7 +722,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
             <button
               type="button"
               className="btn-hardware"
-              style={{ minHeight: '34px', background: 'rgba(0,0,0,0.75)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.2)' }}
+              style={{ minHeight: '34px', background: 'rgba(0,0,0,0.78)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.2)' }}
               onClick={handleForceAdvance}
               title="Khớp nhanh từ này (phím Space)"
             >
@@ -721,7 +733,7 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
         </div>
       </div>
 
-      {/* OPTIONAL TECHNICAL DIAGNOSTICS (COLLAPSIBLE, HIDDEN BY DEFAULT) */}
+      {/* OPTIONAL TECHNICAL DIAGNOSTICS */}
       {showDiagnostics && liveClassification && (
         <div
           style={{

@@ -399,6 +399,130 @@ html, body {
   animation: matchFlashBorder 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Sustained Match State (Sáng xanh giữ nguyên khi làm đúng cho Kiên quay video) */
+.viewfinder-frame.match-sustained,
+.viewfinder-frame.matched-locked {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45), inset 0 0 24px rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Auto-Advance Mode Toggle Switch */
+.auto-advance-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--radius-key);
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 2px 0 #cbd5e1;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.auto-advance-toggle:hover {
+  background: #f8fafc;
+  color: var(--ink-primary);
+}
+
+.auto-advance-toggle:active {
+  transform: translateY(1.5px);
+  box-shadow: 0 0.5px 0 #cbd5e1;
+}
+
+.auto-advance-toggle.on {
+  border-color: #a3e6cd;
+  background: var(--signal-green-dim);
+  color: var(--signal-green);
+  box-shadow: 0 2px 0 #a3e6cd;
+}
+
+.auto-advance-toggle .toggle-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #94a3b8;
+  transition: all 0.15s ease;
+}
+
+.auto-advance-toggle.on .toggle-led {
+  background: var(--signal-green);
+  box-shadow: 0 0 8px var(--signal-green);
+}
+
+/* 1.2s Circular Countdown Ring */
+.countdown-ring-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+
+.countdown-ring-svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.countdown-ring-bg {
+  stroke: rgba(255, 255, 255, 0.15);
+  stroke-width: 3;
+  fill: transparent;
+}
+
+.countdown-ring-fill {
+  stroke: #10b981;
+  stroke-width: 3;
+  fill: transparent;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.05s linear;
+}
+
+.countdown-ring-text {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  color: #34d399;
+}
+
+/* Manual Next Word Action Button */
+.btn-advance-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: var(--radius-key);
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 2px 0 #cbd5e1;
+  color: var(--ink-primary);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.btn-advance-word:hover {
+  background: #f8fafc;
+  border-color: var(--signal-green);
+  color: var(--signal-green);
+  box-shadow: 0 2px 0 var(--signal-green);
+}
+
+.btn-advance-word:active {
+  transform: translateY(1.5px);
+  box-shadow: 0 0.5px 0 #cbd5e1;
+}
+
 .viewfinder-flash-overlay {
   position: absolute;
   inset: 0;
