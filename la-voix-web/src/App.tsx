@@ -7,8 +7,6 @@ import {
   ShieldCheck,
   RotateCcw,
   Video,
-  Play,
-  Square,
   Menu,
   X,
   Languages as LanguagesIcon,
@@ -46,36 +44,7 @@ const getTouchCardIcon = (iconName: string) => {
   }
 };
 
-const AUTO_SCENARIOS: ScenarioId[] = ['medical', 'cardio', 'allergy', 'admin'];
 
-let sharedDemoAudioCtx: AudioContext | null = null;
-
-const playDemoTone = (freq = 880, durationMs = 80) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    if (!sharedDemoAudioCtx || sharedDemoAudioCtx.state === 'closed') {
-      sharedDemoAudioCtx = new AudioCtx();
-    }
-    if (sharedDemoAudioCtx.state === 'suspended') {
-      sharedDemoAudioCtx.resume().catch(() => {});
-    }
-    const osc = sharedDemoAudioCtx.createOscillator();
-    const gain = sharedDemoAudioCtx.createGain();
-    const now = sharedDemoAudioCtx.currentTime;
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now);
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + durationMs / 1000);
-    osc.connect(gain);
-    gain.connect(sharedDemoAudioCtx.destination);
-    osc.start(now);
-    osc.stop(now + durationMs / 1000);
-  } catch (e) {
-    // AudioContext blocked
-  }
-};
 
 export const App: React.FC = () => {
   const [scenarioId, setScenarioId] = useState<ScenarioId>('medical');
@@ -116,6 +85,11 @@ export const App: React.FC = () => {
 
   // Reset session state on scenario switch
   useEffect(() => {
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    setTransitionCountdown(null);
     setCurrentStepIndex(0);
     setCompletedStepIds(new Set());
     setMatchedStepIds(new Set());
