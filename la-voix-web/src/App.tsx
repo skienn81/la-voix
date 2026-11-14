@@ -89,35 +89,19 @@ export const App: React.FC = () => {
   const [sessionState, setSessionState] = useState<SessionState>('recording');
   const resetTimeoutRef = useRef<number | null>(null);
 
-  // Auto-play state & refs for 4 cases demo
-  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
-  const [autoCaseIndex, setAutoCaseIndex] = useState<number>(0);
-  const isAutoPlayingRef = useRef<boolean>(false);
-  const autoCaseIndexRef = useRef<number>(0);
-  const autoPlayTimeoutsRef = useRef<number[]>([]);
-  const speechSafetyTimeoutRef = useRef<number | null>(null);
-
-  const clearAllAutoTimeouts = useCallback(() => {
-    autoPlayTimeoutsRef.current.forEach((t) => clearTimeout(t));
-    autoPlayTimeoutsRef.current = [];
-    if (speechSafetyTimeoutRef.current) {
-      clearTimeout(speechSafetyTimeoutRef.current);
-      speechSafetyTimeoutRef.current = null;
-    }
-  }, []);
-
-  const stopAutoPlay = useCallback(() => {
-    clearAllAutoTimeouts();
-    isAutoPlayingRef.current = false;
-    setIsAutoPlaying(false);
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-  }, [clearAllAutoTimeouts]);
+  // Auto-switch to next case after patient signs & TTS finishes reading
+  const [autoNextCaseEnabled, setAutoNextCaseEnabled] = useState<boolean>(true);
+  const autoNextCaseEnabledRef = useRef<boolean>(true);
+  autoNextCaseEnabledRef.current = autoNextCaseEnabled;
+  const autoNextTimerRef = useRef<number | null>(null);
+  const [transitionCountdown, setTransitionCountdown] = useState<string | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
     return () => {
-      clearAllAutoTimeouts();
+      if (autoNextTimerRef.current) {
+        clearTimeout(autoNextTimerRef.current);
+      }
       if (resetTimeoutRef.current) {
         clearTimeout(resetTimeoutRef.current);
       }
@@ -125,7 +109,7 @@ export const App: React.FC = () => {
         window.speechSynthesis.cancel();
       }
     };
-  }, [clearAllAutoTimeouts]);
+  }, []);
 
   const activeScenario = scenarios[scenarioId];
   const activeReverseCards = scenarioReverseCards[scenarioId];
@@ -178,13 +162,11 @@ export const App: React.FC = () => {
   }, [activeScenario.steps]);
 
   const handleTokenMatched = useCallback((step: GestureStep) => {
-    if (isAutoPlayingRef.current) return;
     setMatchedStepIds((prevSet) => new Set([...prevSet, step.id]));
     setCompletedStepIds((prevSet) => new Set([...prevSet, step.id]));
   }, []);
 
   const handleAutoAdvance = useCallback(() => {
-    if (isAutoPlayingRef.current) return;
     setCurrentStepIndex((prev) => {
       if (prev < activeScenario.steps.length - 1) {
         const nextIdx = prev + 1;
@@ -210,151 +192,63 @@ export const App: React.FC = () => {
     window.dispatchEvent(event);
   }, []);
 
-  // Run a single case in the automated 4-case sequence
-  const runAutoCase = useCallback((caseIndex: number) => {
-    if (!isAutoPlayingRef.current) return;
+  // When patient finishes gestures and TTS speaks aloud:
+  // "Đọc xong chữ của case này thì đợi 2s sau thì chuyển sang case tiếp theo. Đến case cuối xong thì dừng lại k cần làm gì thêm :)"
+  const handleSpeechEnd = useCallback(() => {
+    if (!autoNextCaseEnabledRef.current) return;
 
-    clearAllAutoTimeouts();
+    let nextScId: ScenarioId | null = null;
+    let nextTitle = '';
 
-    if (caseIndex >= AUTO_SCENARIOS.length) {
-      // Completed all 4 cases! Stop completely!
-      isAutoPlayingRef.current = false;
-      setIsAutoPlaying(false);
-      clearAllAutoTimeouts();
-      setResetFeedback(
+    if (scenarioId === 'medical') {
+      nextScId = 'cardio';
+      nextTitle = '02 Tim mạch & Đau ngực';
+    } else if (scenarioId === 'cardio') {
+      nextScId = 'allergy';
+      nextTitle = '03 Dị ứng Phản vệ';
+    } else if (scenarioId === 'allergy') {
+      nextScId = 'admin';
+      nextTitle = '04 Hành chính ULIS';
+    } else {
+      nextScId = null;
+    }
+
+    if (!nextScId) {
+      // Completed Case 4 (admin)!
+      setTransitionCountdown(
         language === 'vi'
-          ? '✓ Hoàn thành tự động toàn bộ 4 ca Demo!'
-          : '✓ Completed auto-demo of all 4 cases!'
+          ? '🎉 Đã hoàn tất phiên giao tiếp cả 4 ca!'
+          : '🎉 All 4 scenarios completed!'
       );
-      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
-      resetTimeoutRef.current = window.setTimeout(() => {
-        setResetFeedback(null);
-        resetTimeoutRef.current = null;
-      }, 3000);
+      setTimeout(() => setTransitionCountdown(null), 3500);
       return;
     }
 
-    autoCaseIndexRef.current = caseIndex;
-    setAutoCaseIndex(caseIndex);
+    setTransitionCountdown(
+      language === 'vi'
+        ? `✓ Đã phát âm xong! Tự chuyển sang [${nextTitle}] sau 2s...`
+        : `✓ Completed! Switching to next case in 2s...`
+    );
 
-    const targetScId = AUTO_SCENARIOS[caseIndex];
-    setScenarioId(targetScId);
-
-    const scObj = scenarios[targetScId];
-    const steps = scObj.steps;
-
-    // Reset session state for this case
-    setCurrentStepIndex(0);
-    setCompletedStepIds(new Set());
-    setMatchedStepIds(new Set());
-    setSelectedTouchCards([]);
-    setSessionState('recording');
-
-    // Step 0: matches after 800ms
-    const t0 = window.setTimeout(() => {
-      if (!isAutoPlayingRef.current) return;
-      playDemoTone(880, 80);
-      setCompletedStepIds(new Set([steps[0].id]));
-      setMatchedStepIds(new Set([steps[0].id]));
-    }, 800);
-
-    // Step 1: matches after 2000ms
-    const t1 = window.setTimeout(() => {
-      if (!isAutoPlayingRef.current) return;
-      playDemoTone(940, 80);
-      setCurrentStepIndex(1);
-      setCompletedStepIds(new Set([steps[0].id, steps[1].id]));
-      setMatchedStepIds(new Set([steps[0].id, steps[1].id]));
-    }, 2000);
-
-    // Step 2: matches after 3200ms
-    const t2 = window.setTimeout(() => {
-      if (!isAutoPlayingRef.current) return;
-      playDemoTone(1020, 80);
-      setCurrentStepIndex(2);
-      setCompletedStepIds(new Set([steps[0].id, steps[1].id, steps[2].id]));
-      setMatchedStepIds(new Set([steps[0].id, steps[1].id, steps[2].id]));
-    }, 3200);
-
-    // Step 3: matches after 4400ms
-    const t3 = window.setTimeout(() => {
-      if (!isAutoPlayingRef.current) return;
-      playDemoTone(1100, 80);
-      setCurrentStepIndex(3);
-      setCompletedStepIds(new Set([steps[0].id, steps[1].id, steps[2].id, steps[3].id]));
-      setMatchedStepIds(new Set([steps[0].id, steps[1].id, steps[2].id, steps[3].id]));
-      setSessionState('ready_to_finalize');
-    }, 4400);
-
-    // Final thumbs up & broadcast after 5400ms
-    const tFinal = window.setTimeout(() => {
-      if (!isAutoPlayingRef.current) return;
-      playDemoTone(1320, 160);
-      setSessionState('finalized');
-
-      // Trigger speech synthesis
-      const event = new KeyboardEvent('keydown', { key: 'c', bubbles: true });
-      window.dispatchEvent(event);
-
-      // Safety fallback in case browser speech onend doesn't fire:
-      speechSafetyTimeoutRef.current = window.setTimeout(() => {
-        if (!isAutoPlayingRef.current) return;
-        runAutoCase(caseIndex + 1);
-      }, 7500);
-    }, 5400);
-
-    autoPlayTimeoutsRef.current = [t0, t1, t2, t3, tFinal];
-  }, [language, clearAllAutoTimeouts]);
-
-  // When speech finishes reading: wait 2s, then advance to next case!
-  const handleSpeechEnd = useCallback(() => {
-    if (!isAutoPlayingRef.current) return;
-
-    if (speechSafetyTimeoutRef.current) {
-      clearTimeout(speechSafetyTimeoutRef.current);
-      speechSafetyTimeoutRef.current = null;
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
     }
 
-    // "Đọc xong chữ của case này thì đợi 2s sau thì chuyển sang case tiếp theo."
-    const delayTimer = window.setTimeout(() => {
-      if (!isAutoPlayingRef.current) return;
-      runAutoCase(autoCaseIndexRef.current + 1);
+    autoNextTimerRef.current = window.setTimeout(() => {
+      setTransitionCountdown(null);
+      if (nextScId) {
+        setScenarioId(nextScId);
+      }
     }, 2000);
-
-    autoPlayTimeoutsRef.current.push(delayTimer);
-  }, [runAutoCase]);
-
-  // Toggle Auto-Play 4 Cases
-  const toggleAutoPlay4Cases = useCallback(() => {
-    if (isAutoPlayingRef.current) {
-      stopAutoPlay();
-      setResetFeedback(language === 'vi' ? 'Đã tạm dừng tự động Demo.' : 'Demo paused.');
-      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
-      resetTimeoutRef.current = window.setTimeout(() => {
-        setResetFeedback(null);
-        resetTimeoutRef.current = null;
-      }, 2000);
-    } else {
-      clearAllAutoTimeouts();
-      isAutoPlayingRef.current = true;
-      setIsAutoPlaying(true);
-      setResetFeedback(
-        language === 'vi'
-          ? '▶️ Bắt đầu tự động chạy 4 ca Demo (Tự chuyển sau 2s)...'
-          : '▶️ Starting auto-demo for 4 cases...'
-      );
-      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
-      resetTimeoutRef.current = window.setTimeout(() => {
-        setResetFeedback(null);
-        resetTimeoutRef.current = null;
-      }, 2500);
-      runAutoCase(0);
-    }
-  }, [clearAllAutoTimeouts, language, runAutoCase, stopAutoPlay]);
+  }, [scenarioId, language]);
 
   // Zero-Retention Reset
   const handleZeroRetentionReset = useCallback(() => {
-    stopAutoPlay();
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    setTransitionCountdown(null);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -406,25 +300,21 @@ export const App: React.FC = () => {
         handleZeroRetentionReset();
       } else if (e.key === 'g' || e.key === 'G') {
         e.preventDefault();
-        toggleAutoPlay4Cases();
+        setAutoNextCaseEnabled((prev) => !prev);
       } else if (e.key === '1') {
-        stopAutoPlay();
         setScenarioId('medical');
       } else if (e.key === '2') {
-        stopAutoPlay();
         setScenarioId('cardio');
       } else if (e.key === '3') {
-        stopAutoPlay();
         setScenarioId('allergy');
       } else if (e.key === '4') {
-        stopAutoPlay();
         setScenarioId('admin');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNextStep, handleZeroRetentionReset, handleFinalizeLike, sessionState, toggleAutoPlay4Cases, stopAutoPlay]);
+  }, [handleNextStep, handleZeroRetentionReset, handleFinalizeLike, sessionState]);
 
   return (
     <div className="la-voix-chassis">
@@ -496,72 +386,167 @@ export const App: React.FC = () => {
           </button>
         </nav>
 
-        {/* Actions */}
-        <div className="strip-actions">
+        {/* Actions: Auto-Next Toggle & Minimalist Hamburger Menu (Dấu 3 gạch) */}
+        <div className="strip-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Nút Tự chuyển ca khi xong (BẬT / TẮT) */}
           <button
             type="button"
-            className="btn-hardware"
-            onClick={() => setLanguage((prev) => (prev === 'vi' ? 'en' : 'vi'))}
-            title="Đổi ngôn ngữ (VI / EN)"
-            aria-label="Toggle language"
+            className={`btn-hardware ${autoNextCaseEnabled ? 'btn-guide' : ''}`}
+            onClick={() => setAutoNextCaseEnabled((prev) => !prev)}
+            title="Tự động chuyển sang ca tiếp theo sau khi bạn làm xong và loa đọc xong 2s (Phím G)"
+            aria-label="Tự chuyển ca"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              minHeight: '34px',
+              padding: '0 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+            }}
           >
-            <LanguagesIcon size={14} aria-hidden="true" />
-            <span>{language.toUpperCase()}</span>
+            <Sparkles size={14} className={autoNextCaseEnabled ? 'text-orange-500' : ''} />
+            <span>
+              {language === 'vi'
+                ? (autoNextCaseEnabled ? 'Tự chuyển ca: BẬT' : 'Tự chuyển ca: TẮT')
+                : (autoNextCaseEnabled ? 'Auto-Next: ON' : 'Auto-Next: OFF')}
+            </span>
+            <span className="key-tag">G</span>
           </button>
 
-          <button
-            type="button"
-            className={`btn-hardware btn-guide ${isAutoPlaying ? 'btn-autoplaying' : ''}`}
-            onClick={toggleAutoPlay4Cases}
-            aria-label="Tự động chạy toàn bộ 4 ca demo"
-            title={isAutoPlaying ? 'Dừng tự động chạy (Phím G)' : 'Tự động chạy hết 4 ca demo (Phím G)'}
-          >
-            {isAutoPlaying ? (
-              <>
-                <Square size={13} fill="#e11d48" aria-hidden="true" />
-                <span>{language === 'vi' ? `Dừng Demo (${autoCaseIndex + 1}/4)` : `Stop (${autoCaseIndex + 1}/4)`}</span>
-                <span className="key-tag" style={{ background: '#fda4af', color: '#881337' }}>G</span>
-              </>
-            ) : (
-              <>
-                <Play size={13} fill="currentColor" aria-hidden="true" />
-                <span>{language === 'vi' ? 'Tự chạy 4 ca' : 'Auto 4 Cases'}</span>
-                <span className="key-tag">G</span>
-              </>
+          {/* Dấu 3 Gạch (Hamburger Menu Button) */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className={`btn-hardware ${isMenuOpen ? 'active' : ''}`}
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              title="Menu mở rộng & Cài đặt hệ thống"
+              aria-label="Menu"
+              style={{
+                minHeight: '34px',
+                width: '38px',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+
+            {/* Dropdown Menu 3 Gạch */}
+            {isMenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '40px',
+                  right: 0,
+                  width: '270px',
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  boxShadow: '0 12px 36px rgba(0,0,0,0.2)',
+                  padding: '12px',
+                  zIndex: 200,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', paddingBottom: '4px', borderBottom: '1px solid #f1f5f9' }}>
+                  {language === 'vi' ? 'Tiện ích hệ thống' : 'System Utilities'}
+                </div>
+
+                {/* Kịch bản lời thoại 90s */}
+                <button
+                  type="button"
+                  className="btn-hardware"
+                  style={{ width: '100%', justifyContent: 'flex-start', gap: '8px', minHeight: '34px', fontSize: '12px' }}
+                  onClick={() => {
+                    setIsVideoGuideOpen(true);
+                    setIsMenuOpen(false);
+                  }}
+                >
+                  <Video size={14} className="text-orange-500" />
+                  <span>{language === 'vi' ? 'Kịch bản lời thoại 90s' : '90s Presentation Script'}</span>
+                </button>
+
+                {/* Đổi ngôn ngữ VI / EN */}
+                <button
+                  type="button"
+                  className="btn-hardware"
+                  style={{ width: '100%', justifyContent: 'space-between', minHeight: '34px', fontSize: '12px' }}
+                  onClick={() => setLanguage((prev) => (prev === 'vi' ? 'en' : 'vi'))}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <LanguagesIcon size={14} />
+                    <span>{language === 'vi' ? 'Ngôn ngữ hiển thị' : 'Display Language'}</span>
+                  </div>
+                  <span style={{ fontWeight: 800, color: 'var(--signal-orange)' }}>{language.toUpperCase()}</span>
+                </button>
+
+                {/* Xóa phiên Zero-Retention */}
+                <button
+                  type="button"
+                  className="btn-hardware btn-reset"
+                  style={{ width: '100%', justifyContent: 'flex-start', gap: '8px', minHeight: '34px', fontSize: '12px' }}
+                  onClick={() => {
+                    handleZeroRetentionReset();
+                    setIsMenuOpen(false);
+                  }}
+                  title="Xóa phiên (Luật 91/2025/QH15)"
+                >
+                  <RotateCcw size={14} />
+                  <span>{language === 'vi' ? 'Xóa phiên sạch sẽ (Phím R)' : 'Zero-Retention Reset (R)'}</span>
+                </button>
+
+                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '6px', fontSize: '10px', color: '#94a3b8', lineHeight: 1.4 }}>
+                  Luật 91/2025/QH15 · Zero-Retention · MediPipe Single-Hand V3
+                </div>
+              </div>
             )}
-          </button>
-
-          <button
-            type="button"
-            className="btn-hardware"
-            style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-            onClick={() => setIsVideoGuideOpen(true)}
-            title="Xem kịch bản lời thoại 90s cho thuyết trình"
-            aria-label="Xem kịch bản 90s"
-          >
-            <Video size={13} aria-hidden="true" />
-            <span>{language === 'vi' ? 'Lời thoại' : 'Script'}</span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-hardware btn-reset"
-            onClick={handleZeroRetentionReset}
-            title="Xóa phiên (Luật 91/2025/QH15)"
-            aria-label="Reset session"
-          >
-            <RotateCcw size={14} aria-hidden="true" />
-            <span>{language === 'vi' ? 'Xóa phiên' : 'Reset'}</span>
-            <span className="key-tag">R</span>
-          </button>
+          </div>
         </div>
       </header>
 
-      {/* Reset Notification Banner */}
+      {/* Floating Transition Countdown Toast (Non-intrusive) */}
+      {transitionCountdown && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '48px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            padding: '10px 24px',
+            borderRadius: '30px',
+            background: 'rgba(15, 23, 42, 0.94)',
+            color: '#ffffff',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(8px)',
+            border: '1.5px solid #10b981',
+            fontSize: '13px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+          role="status"
+        >
+          <Sparkles size={16} className="text-emerald-400 animate-spin" />
+          <span>{transitionCountdown}</span>
+        </div>
+      )}
+
+      {/* Floating Reset Notification Toast (Non-intrusive) */}
       {resetFeedback && (
         <div
           style={{
-            padding: '8px 14px',
+            position: 'fixed',
+            top: '64px',
+            right: '24px',
+            zIndex: 1000,
+            padding: '8px 16px',
             borderRadius: '6px',
             background: 'var(--signal-green-dim)',
             border: '1px solid #a3e6cd',
@@ -571,6 +556,7 @@ export const App: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
           }}
           role="status"
         >
