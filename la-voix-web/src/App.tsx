@@ -314,6 +314,72 @@ export const App: React.FC = () => {
       <main className="workspace-deck" role="main">
         {/* LEFT CONSOLE: WEBCAM TRACKER & CLEAN SENTENCE STRIP */}
         <div className="left-console">
+          {/* SIGN PROTOCOL PIPELINE (6 GIAI ĐOẠN HOÀN CHỈNH) */}
+          <div className="sign-protocol-strip" role="navigation" aria-label="Sign Protocol Pipeline" style={{ marginBottom: '8px' }}>
+            {/* Stage 0: Khởi động */}
+            <div
+              className={`protocol-step-item stage-start ${
+                sessionState === 'idle' ? 'active' : 'completed'
+              }`}
+              onClick={() => setSessionState('idle')}
+              title="Giai đoạn 0: Vẫy tay chào hoặc ✌️ để khởi động phiên"
+              style={{ cursor: 'pointer' }}
+            >
+              <span>👋</span>
+              <span>0. Khởi động</span>
+              {sessionState !== 'idle' && <CheckCircle2 size={11} className="text-emerald-500" />}
+            </div>
+
+            <span className="protocol-arrow">→</span>
+
+            {/* Stages 1 to 4: 4 gesture words */}
+            {activeScenario.steps.map((step, idx) => {
+              const stageNum = idx + 1;
+              const isMatched = matchedStepIds.has(step.id);
+              const isCurrent = sessionState === 'recording' && currentStepIndex === idx;
+              const gestureIcon = idx === 0 ? '☝️' : idx === 1 ? '✊' : idx === 2 ? '🖐️' : '👈';
+
+              return (
+                <React.Fragment key={step.id}>
+                  <div
+                    className={`protocol-step-item ${isCurrent ? 'active' : ''} ${isMatched ? 'completed' : ''}`}
+                    onClick={() => {
+                      setSessionState('recording');
+                      setCurrentStepIndex(idx);
+                      setCompletedStepIds((prev) => new Set([...prev, step.id]));
+                      setMatchedStepIds((prev) => new Set([...prev, step.id]));
+                    }}
+                    title={`Giai đoạn ${stageNum}: ${step.gloss}`}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span>{gestureIcon}</span>
+                    <span>0{stageNum}. {language === 'vi' ? step.gloss : step.glossEn}</span>
+                    {isMatched && <CheckCircle2 size={11} className="text-emerald-500" />}
+                  </div>
+                  <span className="protocol-arrow">→</span>
+                </React.Fragment>
+              );
+            })}
+
+            {/* Stage 5: Thả Like Chốt & Tự động phát âm */}
+            <div
+              className={`protocol-step-item stage-thumbsup ${
+                sessionState === 'ready_to_finalize' ? 'active' : ''
+              }`}
+              onClick={() => {
+                if (allTokensAssembled) {
+                  setSessionState('ready_to_finalize');
+                }
+              }}
+              title="Giai đoạn 5: Thả like 👍 để chốt câu và tự động phát âm thanh ra loa Bác sĩ"
+              style={{ cursor: allTokensAssembled ? 'pointer' : 'default' }}
+            >
+              <span>👍</span>
+              <span>5. Chốt & Phát</span>
+              {sessionState === 'ready_to_finalize' && <Sparkles size={11} className="text-emerald-500" />}
+            </div>
+          </div>
+
           {/* SENSOR CAMERA / VIEWFINDER */}
           <CameraTracker
             currentStep={currentStep}
