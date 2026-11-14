@@ -276,6 +276,20 @@ html, body {
   box-shadow: 0 2px 0 #ffaa80;
 }
 
+.btn-hardware.btn-autoplaying {
+  background: #ffe4e6 !important;
+  border-color: #f43f5e !important;
+  color: #e11d48 !important;
+  box-shadow: 0 0 14px rgba(244, 63, 94, 0.45) !important;
+  animation: pulse-autoplaying 1.4s infinite ease-in-out;
+}
+
+@keyframes pulse-autoplaying {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.6); }
+  60% { transform: scale(1.02); box-shadow: 0 0 0 8px rgba(244, 63, 94, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+}
+
 .btn-hardware.btn-reset {
   background: var(--signal-red-dim);
   border-color: #ffbdad;

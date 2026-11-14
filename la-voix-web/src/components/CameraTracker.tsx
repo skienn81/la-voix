@@ -143,12 +143,21 @@ export const CameraTracker: React.FC<CameraTrackerProps> = ({
   const onResetSessionRef = useRef(onResetSession);
   onResetSessionRef.current = onResetSession;
 
-  // Reset finalize trigger lock only when starting a new session or recording
+  // Reset finalize trigger lock & cooldown when starting a new session or recording
   useEffect(() => {
     if (sessionState === 'idle' || sessionState === 'recording') {
       hasTriggeredFinalizeRef.current = false;
+      lockCooldownUntilRef.current = 0;
+      matchStartTimeRef.current = null;
     }
   }, [sessionState]);
+
+  // When step or scenario changes, always reset cooldown and timers
+  useEffect(() => {
+    lockCooldownUntilRef.current = 0;
+    matchStartTimeRef.current = null;
+    setLockProgress(0);
+  }, [currentStep.id, currentStepIndex]);
 
   const stopCameraStream = useCallback(() => {
     if (streamRef.current) {

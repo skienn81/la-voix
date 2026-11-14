@@ -10,6 +10,7 @@ interface ConfirmationGateProps {
   selectedTouchCards: TouchCard[];
   language: Language;
   onConfirmSpeech?: (spokenText: string) => void;
+  onSpeechEnd?: () => void;
 }
 
 export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
@@ -20,6 +21,7 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
   selectedTouchCards,
   language,
   onConfirmSpeech,
+  onSpeechEnd,
 }) => {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [hasConfirmed, setHasConfirmed] = useState<boolean>(false);
@@ -188,10 +190,16 @@ export const ConfirmationGate: React.FC<ConfirmationGateProps> = ({
       if (onConfirmSpeech) {
         onConfirmSpeech(textToSpeak);
       }
+      if (onSpeechEnd) {
+        onSpeechEnd();
+      }
     };
 
     utterance.onerror = () => {
       setIsSpeaking(false);
+      if (onSpeechEnd) {
+        onSpeechEnd();
+      }
     };
 
     window.speechSynthesis.speak(utterance);
