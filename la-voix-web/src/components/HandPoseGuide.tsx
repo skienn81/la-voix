@@ -39,6 +39,7 @@ export const HandPoseGuide: React.FC<HandPoseGuideProps> = ({
         );
 
       case 'Đau':
+      case 'Cần':
         // FIST (✊)
         return (
           <svg viewBox="0 0 100 100" className="pose-svg" aria-label="Hình mẫu: Nắm đấm bàn tay">
@@ -53,6 +54,7 @@ export const HandPoseGuide: React.FC<HandPoseGuideProps> = ({
         );
 
       case 'Bụng':
+      case 'Giúp':
         // OPEN PALM (🖐️)
         return (
           <svg viewBox="0 0 100 100" className="pose-svg" aria-label="Hình mẫu: Xòe 5 ngón tay">
@@ -67,6 +69,7 @@ export const HandPoseGuide: React.FC<HandPoseGuideProps> = ({
         );
 
       case 'Hôm qua':
+      case 'Khai báo':
       default:
         // THUMBS_UP (👍 Thả like kết thúc)
         return (

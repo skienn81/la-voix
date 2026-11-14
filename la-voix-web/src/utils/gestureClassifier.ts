@@ -230,11 +230,9 @@ export function classifyHandLandmarks(
 export function getTargetCanonicalPose(gloss: string): CanonicalPose {
   const g = (gloss || '').trim();
   if (g === 'Tôi') return 'POINTING';
-  if (g === 'Đau') return 'FIST';
-  if (g === 'Bụng') return 'OPEN_PALM';
-  if (g === 'Hôm qua' || g.includes('Like') || g.includes('Xong') || g.includes('Đồng ý')) return 'THUMBS_UP';
-  if (g === 'Cần' || g === 'Giúp') return 'OPEN_PALM';
-  if (g === 'Khai báo') return 'THUMBS_UP';
+  if (g === 'Đau' || g === 'Cần') return 'FIST';
+  if (g === 'Bụng' || g === 'Giúp') return 'OPEN_PALM';
+  if (g === 'Hôm qua' || g === 'Khai báo' || g.includes('Like') || g.includes('Xong') || g.includes('Đồng ý')) return 'THUMBS_UP';
   return 'POINTING';
 }
 
