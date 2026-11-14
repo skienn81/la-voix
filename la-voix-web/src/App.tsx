@@ -605,29 +605,29 @@ export const App: React.FC = () => {
               {/* Mũi tên kết nối sang cử chỉ thứ 5 */}
               <span className="assembly-token-connector">→</span>
 
-              {/* Cử chỉ thứ 5: Thả like 👍 chốt câu */}
+              {/* Cử chỉ thứ 5: Thả like 👍 chốt câu & phát loa */}
               <div
-                className={`assembly-token ${sessionState === 'finalized' ? 'active-token tokenAssemble' : sessionState === 'ready_to_finalize' ? 'token-ready-finalize' : ''}`}
-                style={{
-                  opacity: sessionState === 'finalized' ? 1 : sessionState === 'ready_to_finalize' ? 1 : 0.45,
-                  borderColor: sessionState === 'finalized' ? '#10b981' : sessionState === 'ready_to_finalize' ? 'var(--signal-orange)' : '#cbd5e1',
-                  borderWidth: sessionState === 'ready_to_finalize' ? '2px' : '1px',
-                  background: sessionState === 'ready_to_finalize' ? '#fff7ed' : sessionState === 'finalized' ? '#ecfdf5' : undefined,
-                  cursor: sessionState === 'ready_to_finalize' ? 'pointer' : 'default',
-                }}
+                className={`assembly-token token-finalize ${
+                  sessionState === 'finalized'
+                    ? 'finalized'
+                    : sessionState === 'ready_to_finalize'
+                    ? 'awaiting-like'
+                    : 'idle'
+                }`}
                 onClick={() => {
                   if (sessionState === 'ready_to_finalize') {
                     handleFinalizeLike();
                   }
                 }}
-                title={language === 'vi' ? 'Cử chỉ 5: Thả like 👍 để duyệt phát âm ra loa' : 'Gesture 5: Thumbs up 👍 to broadcast'}
+                title={language === 'vi' ? 'Cử chỉ 5: Thả like 👍 để duyệt phát âm ra loa Bác sĩ' : 'Gesture 5: Thumbs up 👍 to broadcast'}
               >
-                <span className="token-index" style={{ color: sessionState === 'ready_to_finalize' ? 'var(--signal-orange)' : undefined }}>05</span>
+                <span className="token-index">05</span>
                 <span className="token-gloss" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span>{language === 'vi' ? 'Thả like' : 'Confirm'}</span>
                   <span>👍</span>
                 </span>
-                {sessionState === 'finalized' && <CheckCircle2 size={12} className="text-emerald-500" />}
+                {sessionState === 'finalized' && <CheckCircle2 size={12} className="text-white" />}
+                {sessionState === 'ready_to_finalize' && <Sparkles size={12} className="text-emerald-500 animate-spin" />}
               </div>
             </div>
           </div>
