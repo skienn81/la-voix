@@ -24,7 +24,13 @@ dist-ssr
 *.sln
 *.sw?
 
-# Temporary Office lock files
+# Temporary Office lock files & Document Dossiers (Kept local, ignored from public git)
+*.docx
+*.doc
+*.pdf
+*.pptx
+*.xlsx
+*.csv
 ~$*.docx
 ~$*.xlsx
 ~$*.pptx
